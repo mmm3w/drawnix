@@ -29,7 +29,7 @@ import {
   DrawPointerType,
   FlowchartSymbols,
 } from '@plait/draw';
-import { FreehandPanel , FREEHANDS } from './freehand-panel/freehand-panel';
+import { FreehandPanel, FREEHANDS } from './freehand-panel/freehand-panel';
 import { ShapePicker } from '../shape-picker';
 import { ArrowPicker } from '../arrow-picker';
 import { useState } from 'react';
@@ -42,7 +42,7 @@ import {
 } from '../../hooks/use-drawnix';
 import { ExtraToolsButton } from './extra-tools/extra-tools-button';
 import { addImage } from '../../utils/image';
-import { useI18n } from '../../i18n';
+import { Translations, useI18n } from '../../i18n';
 import { SHAPES } from '../shape-picker';
 import { ARROWS } from '../arrow-picker';
 
@@ -53,7 +53,7 @@ export enum PopupKey {
 }
 
 type AppToolButtonProps = {
-  titleKey?: keyof typeof import('../../i18n').Translations;
+  titleKey?: keyof Translations;
   name?: string;
   icon: React.ReactNode;
   pointer?: DrawnixPointerType;
@@ -143,8 +143,12 @@ export const CreationToolbar = () => {
     useState<AppToolButtonProps>(
       BUTTONS.find((button) => button.key === PopupKey.freehand)!
     );
-  const [lastShapePointer, setLastShapePointer] = useState<string | undefined>(SHAPES[0].pointer);
-  const [lastArrowPointer, setLastArrowPointer] = useState<string | undefined>(ARROWS[0].pointer);
+  const [lastShapePointer, setLastShapePointer] = useState<DrawPointerType>(
+    SHAPES[0].pointer
+  );
+  const [lastArrowPointer, setLastArrowPointer] = useState<DrawPointerType>(
+    ARROWS[0].pointer
+  );
 
   const onPointerDown = (pointer: DrawnixPointerType) => {
     setCreationMode(board, BoardCreationMode.dnd);
@@ -214,9 +218,17 @@ export const CreationToolbar = () => {
                   <FreehandPanel
                     onPointerUp={(pointer: DrawnixPointerType) => {
                       setPointer(pointer);
-                      setLastFreehandButton(
-                        FREEHANDS.find((button) => button.pointer === pointer)!
+                      const matched = FREEHANDS.find(
+                        (item: (typeof FREEHANDS)[number]) =>
+                          item.type === 'tool' && item.pointer === pointer
                       );
+                      if (matched && matched.type === 'tool') {
+                        setLastFreehandButton({
+                          icon: matched.icon,
+                          pointer: matched.pointer,
+                          titleKey: matched.titleKey,
+                        });
+                      }
                     }}
                   ></FreehandPanel>
                 </PopoverContent>
@@ -250,9 +262,9 @@ export const CreationToolbar = () => {
                       if (isShapePointer(board)) {
                         BoardTransforms.updatePointerType(board, board.pointer);
                       } else {
-                        setPointer(lastShapePointer || SHAPES[0].pointer)
+                        setPointer(lastShapePointer as DrawnixPointerType);
                         setCreationMode(board, BoardCreationMode.drawing);
-                        BoardTransforms.updatePointerType(board, lastShapePointer || SHAPES[0].pointer);
+                        BoardTransforms.updatePointerType(board, lastShapePointer);
                       } 
                     }}
                   />
@@ -261,7 +273,7 @@ export const CreationToolbar = () => {
                   <ShapePicker
                     onPointerUp={(pointer: DrawPointerType) => {
                       setShapeOpen(false);
-                      setPointer(pointer);
+                      setPointer(pointer as DrawnixPointerType);
                       setLastShapePointer(pointer);
                     }}
                   ></ShapePicker>
@@ -292,9 +304,9 @@ export const CreationToolbar = () => {
                       if (isArrowLinePointer(board)) {
                         BoardTransforms.updatePointerType(board, board.pointer);
                       } else {
-                        setCreationMode(board, BoardCreationMode.drawing);
+                        setPointer(lastArrowPointer as DrawnixPointerType);
                         BoardTransforms.updatePointerType(board, lastArrowPointer || ARROWS[0].pointer);
-                        setPointer(lastArrowPointer || ARROWS[0].pointer);
+                        BoardTransforms.updatePointerType(board, lastArrowPointer);
                       }
                     }}
                   />
@@ -303,7 +315,7 @@ export const CreationToolbar = () => {
                   <ArrowPicker
                     onPointerUp={(pointer: DrawPointerType) => {
                       setArrowOpen(false);
-                      setPointer(pointer);
+                      setPointer(pointer as DrawnixPointerType);
                       setLastArrowPointer(pointer);
                     }}
                   ></ArrowPicker>
