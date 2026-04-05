@@ -27,6 +27,7 @@ export function getFreehandPointers() {
 export const FREEHAND_MEMORIZE_KEY = 'drawnix:freehand';
 export const ERASER_MEMORIZE_KEY = 'drawnix:eraser';
 export const DEFAULT_ERASER_SIZE = 8;
+export const DEFAULT_PEN_SIZE = 2;
 
 export const getFreehandMemorizedStyle = () => {
   const memorized = getMemorizedLatest<Freehand>(FREEHAND_MEMORIZE_KEY) || {};
@@ -34,6 +35,15 @@ export const getFreehandMemorizedStyle = () => {
     strokeColor: memorized.strokeColor,
     strokeWidth: memorized.strokeWidth,
   };
+};
+
+export const getPenSize = () => {
+  const memorizedStyle = getFreehandMemorizedStyle();
+  const strokeWidth = memorizedStyle.strokeWidth;
+  if (typeof strokeWidth === 'number' && !Number.isNaN(strokeWidth)) {
+    return strokeWidth;
+  }
+  return DEFAULT_PEN_SIZE;
 };
 
 export const getEraserSize = () => {

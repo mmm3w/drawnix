@@ -52,6 +52,7 @@ import {
   ERASER_MEMORIZE_KEY,
   FREEHAND_MEMORIZE_KEY,
   getEraserSize,
+  getPenSize,
 } from './plugins/freehand/utils';
 
 export type DrawnixIframeControlOptions = {
@@ -181,11 +182,28 @@ const setEraserCursorSize = (board: PlaitBoard, size: number) => {
   const padding = 2;
   const svgSize = Math.ceil(radius * 2 + strokeWidth * 2 + padding * 2);
   const center = svgSize / 2;
+  const hotspot = Math.floor(center);
   const svg = `<svg width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="#666" stroke-width="${strokeWidth}"/></svg>`;
-  const encoded = encodeURIComponent(svg);
+  const encoded = window.btoa(svg);
   boardContainer.style.setProperty(
     '--drawnix-eraser-cursor',
-    `url("data:image/svg+xml,${encoded}") ${center} ${center}`
+    `url("data:image/svg+xml;base64,${encoded}") ${hotspot} ${hotspot}`
+  );
+};
+
+const setPenCursorSize = (board: PlaitBoard, size: number) => {
+  const boardContainer = PlaitBoard.getBoardContainer(board) as HTMLElement;
+  const radius = Math.max(1, Math.min(200, size));
+  const strokeWidth = 1.5;
+  const padding = 2;
+  const svgSize = Math.ceil(radius * 2 + strokeWidth * 2 + padding * 2);
+  const center = svgSize / 2;
+  const hotspot = Math.floor(center);
+  const svg = `<svg width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="#666" stroke-width="${strokeWidth}"/></svg>`;
+  const encoded = window.btoa(svg);
+  boardContainer.style.setProperty(
+    '--drawnix-pen-cursor',
+    `url("data:image/svg+xml;base64,${encoded}") ${hotspot} ${hotspot}`
   );
 };
 
@@ -306,6 +324,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           'strokeWidth',
           normalizedSize
         );
+        setPenCursorSize(board, normalizedSize);
         return;
       }
       if (DRAWNIX_SET_ERASER_SIZE_MESSAGE_TYPES.has(message.type)) {
@@ -331,6 +350,9 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   useEffect(() => {
     if (!board) {
       return;
+    }
+    if (appState.pointer === FreehandShape.feltTipPen) {
+      setPenCursorSize(board, getPenSize());
     }
     if (appState.pointer === FreehandShape.eraser) {
       setEraserCursorSize(board, getEraserSize());
