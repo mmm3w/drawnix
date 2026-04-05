@@ -176,7 +176,15 @@ const getPenSizeFromMessage = (message: Record<string, unknown>) => {
 };
 
 const setEraserCursorSize = (board: PlaitBoard, size: number) => {
+  const canUseCustomCursor =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   const boardContainer = PlaitBoard.getBoardContainer(board) as HTMLElement;
+  if (!canUseCustomCursor) {
+    boardContainer.style.removeProperty('--drawnix-eraser-cursor');
+    return;
+  }
   const radius = Math.max(1, Math.min(200, size));
   const strokeWidth = 1.5;
   const padding = 2;
@@ -192,7 +200,15 @@ const setEraserCursorSize = (board: PlaitBoard, size: number) => {
 };
 
 const setPenCursorSize = (board: PlaitBoard, size: number) => {
+  const canUseCustomCursor =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   const boardContainer = PlaitBoard.getBoardContainer(board) as HTMLElement;
+  if (!canUseCustomCursor) {
+    boardContainer.style.removeProperty('--drawnix-pen-cursor');
+    return;
+  }
   const normalizedSize = Math.max(1, Math.min(200, size));
   const strokeWidth = 1.5;
   // Pen size maps to stroke width, so cursor diameter should match it.
