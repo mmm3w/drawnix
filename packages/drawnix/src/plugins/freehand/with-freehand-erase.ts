@@ -1,4 +1,5 @@
 import {
+  distanceBetweenPointAndPoint,
   PlaitBoard,
   PlaitElement,
   Point,
@@ -7,7 +8,7 @@ import {
   toViewBoxPoint,
 } from '@plait/core';
 import { isDrawingMode } from '@plait/common';
-import { isHitFreehand } from './utils';
+import { getEraserSize, isHitFreehand } from './utils';
 import { Freehand, FreehandShape } from './type';
 import { CoreTransforms } from '@plait/core';
 import { LaserPointer } from '../../utils/laser-pointer';
@@ -27,15 +28,26 @@ export const withFreehandErase = (board: PlaitBoard) => {
       board,
       toHostPoint(board, point[0], point[1])
     );
+    const eraserSize = getEraserSize();
 
     const freehandElements = board.children.filter((element) =>
       Freehand.isFreehand(element)
     ) as Freehand[];
 
     freehandElements.forEach((element) => {
+      const isHitByEraserRadius = element.points.some((currentPoint) => {
+        return (
+          distanceBetweenPointAndPoint(
+            currentPoint[0],
+            currentPoint[1],
+            viewBoxPoint[0],
+            viewBoxPoint[1]
+          ) <= eraserSize
+        );
+      });
       if (
         !elementsToDelete.has(element.id) &&
-        isHitFreehand(board, element, viewBoxPoint)
+        (isHitByEraserRadius || isHitFreehand(board, element, viewBoxPoint))
       ) {
         PlaitElement.getElementG(element).style.opacity = '0.2';
         elementsToDelete.add(element.id);

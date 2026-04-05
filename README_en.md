@@ -153,6 +153,18 @@ iframe.contentWindow?.postMessage(
 ```
 > Note: this updates the default pen style, and newly drawn pen strokes will use the new size.
 
+Switch eraser size:
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-eraser-size',
+    size: 16,
+  },
+  'https://your-drawnix-app.com'
+);
+```
+
 Supported `tool` values:
 
 - `hand`

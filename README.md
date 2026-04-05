@@ -155,6 +155,18 @@ iframe.contentWindow?.postMessage(
 ```
 > 说明：该事件会更新画笔默认样式，后续新绘制的笔迹会使用新粗细。
 
+切换橡皮大小：
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-eraser-size',
+    size: 16,
+  },
+  'https://your-drawnix-app.com'
+);
+```
+
 当前支持的 `tool` 值：
 
 - `hand`

@@ -48,7 +48,11 @@ import { I18nProvider } from './i18n';
 import { Tutorial } from './components/tutorial';
 import { LASER_POINTER_CLASS_NAME } from './utils/laser-pointer';
 import { Freehand, FreehandShape } from './plugins/freehand/type';
-import { FREEHAND_MEMORIZE_KEY } from './plugins/freehand/utils';
+import {
+  ERASER_MEMORIZE_KEY,
+  FREEHAND_MEMORIZE_KEY,
+  getEraserSize,
+} from './plugins/freehand/utils';
 
 export type DrawnixIframeControlOptions = {
   enabled?: boolean;
@@ -87,6 +91,13 @@ const DRAWNIX_SET_PEN_SIZE_MESSAGE_TYPES = new Set([
   'drawnix:setPenSize',
   'set-pen-size',
   'setPenSize',
+]);
+
+const DRAWNIX_SET_ERASER_SIZE_MESSAGE_TYPES = new Set([
+  'drawnix:set-eraser-size',
+  'drawnix:setEraserSize',
+  'set-eraser-size',
+  'setEraserSize',
 ]);
 
 const DRAWNIX_TOOL_POINTER_MAP: Record<string, DrawnixPointerType> = {
@@ -161,6 +172,21 @@ const getPenSizeFromMessage = (message: Record<string, unknown>) => {
     }
   }
   return null;
+};
+
+const setEraserCursorSize = (board: PlaitBoard, size: number) => {
+  const boardContainer = PlaitBoard.getBoardContainer(board) as HTMLElement;
+  const radius = Math.max(1, Math.min(200, size));
+  const strokeWidth = 1.5;
+  const padding = 2;
+  const svgSize = Math.ceil(radius * 2 + strokeWidth * 2 + padding * 2);
+  const center = svgSize / 2;
+  const svg = `<svg width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="#666" stroke-width="${strokeWidth}"/></svg>`;
+  const encoded = encodeURIComponent(svg);
+  boardContainer.style.setProperty(
+    '--drawnix-eraser-cursor',
+    `url("data:image/svg+xml,${encoded}") ${center} ${center}`
+  );
 };
 
 export type DrawnixProps = {
@@ -280,6 +306,20 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           'strokeWidth',
           normalizedSize
         );
+        return;
+      }
+      if (DRAWNIX_SET_ERASER_SIZE_MESSAGE_TYPES.has(message.type)) {
+        const size = getPenSizeFromMessage(message);
+        if (typeof size !== 'number' || Number.isNaN(size)) {
+          return;
+        }
+        const normalizedSize = Math.max(1, Math.min(200, size));
+        memorizeLatest(
+          ERASER_MEMORIZE_KEY,
+          'eraserSize' as any,
+          normalizedSize as any
+        );
+        setEraserCursorSize(board, normalizedSize);
       }
     };
     window.addEventListener('message', onMessage);
@@ -287,6 +327,15 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       window.removeEventListener('message', onMessage);
     };
   }, [board, iframeControlEnabled, iframeControl?.allowedOrigins]);
+
+  useEffect(() => {
+    if (!board) {
+      return;
+    }
+    if (appState.pointer === FreehandShape.eraser) {
+      setEraserCursorSize(board, getEraserSize());
+    }
+  }, [board, appState.pointer]);
 
   const plugins: PlaitPlugin[] = [
     withDraw,
