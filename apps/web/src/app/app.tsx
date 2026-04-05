@@ -51,6 +51,7 @@ export function App() {
           setTutorial(false);
         }
       }}
+      hidePopupToolbar
       // embedded={true}
       tutorial={tutorial}
       iframeControl={{ enabled: true }}

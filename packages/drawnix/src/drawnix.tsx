@@ -176,6 +176,7 @@ export type DrawnixProps = {
   tutorial?: boolean;
   embedded?: boolean;
   iframeControl?: DrawnixIframeControlOptions;
+  hidePopupToolbar?: boolean;
 } & React.HTMLAttributes<HTMLDivElement>;
 
 export const Drawnix: React.FC<DrawnixProps> = ({
@@ -191,6 +192,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   tutorial = false,
   embedded = false,
   iframeControl,
+  hidePopupToolbar = false,
 }) => {
   const options: PlaitBoardOptions = {
     readonly: false,
@@ -342,7 +344,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                 <CreationToolbar></CreationToolbar>
                 <ZoomToolbar></ZoomToolbar>
                 <ThemeToolbar></ThemeToolbar>
-                <PopupToolbar></PopupToolbar>
+                {!hidePopupToolbar && <PopupToolbar></PopupToolbar>}
                 <LinkPopup></LinkPopup>
                 <ClosePencilToolbar></ClosePencilToolbar>
                 <TTDDialog container={containerRef.current}></TTDDialog>

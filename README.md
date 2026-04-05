@@ -107,6 +107,7 @@ drawnix/
 <Drawnix
   value={[]}
   embedded={true}
+  hidePopupToolbar={true}
   iframeControl={{
     enabled: true,
     // 可选：限制消息来源，不传则默认不限制

@@ -105,6 +105,7 @@ I will be iterating frequently on *drawnix.com* until the release of the *Dawn* 
 <Drawnix
   value={[]}
   embedded={true}
+  hidePopupToolbar={true}
   iframeControl={{
     enabled: true,
     // Optional: only accept messages from trusted origins
