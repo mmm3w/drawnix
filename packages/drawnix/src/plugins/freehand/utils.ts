@@ -18,20 +18,38 @@ import {
   isHitPolyLine,
   isRectangleHitRotatedPoints,
 } from '@plait/draw';
+import { getMemorizedLatest } from '@plait/common';
 
 export function getFreehandPointers() {
   return [FreehandShape.feltTipPen, FreehandShape.eraser];
 }
 
+export const FREEHAND_MEMORIZE_KEY = 'drawnix:freehand';
+
+export const getFreehandMemorizedStyle = () => {
+  const memorized = getMemorizedLatest<Freehand>(FREEHAND_MEMORIZE_KEY) || {};
+  return {
+    strokeColor: memorized.strokeColor,
+    strokeWidth: memorized.strokeWidth,
+  };
+};
+
 export const createFreehandElement = (
   shape: FreehandShape,
   points: Point[]
 ): Freehand => {
+  const memorizedStyle = getFreehandMemorizedStyle();
   const element: Freehand = {
     id: idCreator(),
     type: 'freehand',
     shape,
     points,
+    ...(memorizedStyle.strokeColor
+      ? { strokeColor: memorizedStyle.strokeColor }
+      : {}),
+    ...(memorizedStyle.strokeWidth
+      ? { strokeWidth: memorizedStyle.strokeWidth }
+      : {}),
   };
   return element;
 };

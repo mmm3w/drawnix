@@ -128,6 +128,32 @@ iframe.contentWindow?.postMessage(
 );
 ```
 
+切换画笔颜色：
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-pen-color',
+    color: '#ff4d4f',
+  },
+  'https://your-drawnix-app.com'
+);
+```
+> 说明：该事件会更新画笔默认样式，后续新绘制的笔迹会使用新颜色。
+
+切换画笔粗细：
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-pen-size',
+    size: 8,
+  },
+  'https://your-drawnix-app.com'
+);
+```
+> 说明：该事件会更新画笔默认样式，后续新绘制的笔迹会使用新粗细。
+
 当前支持的 `tool` 值：
 
 - `hand`

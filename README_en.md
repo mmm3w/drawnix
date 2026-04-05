@@ -126,6 +126,32 @@ iframe.contentWindow?.postMessage(
 );
 ```
 
+Switch pen color:
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-pen-color',
+    color: '#ff4d4f',
+  },
+  'https://your-drawnix-app.com'
+);
+```
+> Note: this updates the default pen style, and newly drawn pen strokes will use the new color.
+
+Switch pen size:
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-pen-size',
+    size: 8,
+  },
+  'https://your-drawnix-app.com'
+);
+```
+> Note: this updates the default pen style, and newly drawn pen strokes will use the new size.
+
 Supported `tool` values:
 
 - `hand`

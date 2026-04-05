@@ -12,8 +12,13 @@ import {
   Viewport,
 } from '@plait/core';
 import React, { useState, useRef, useEffect } from 'react';
-import { withGroup } from '@plait/common';
-import { withDraw } from '@plait/draw';
+import {
+  BoardCreationMode,
+  memorizeLatest,
+  setCreationMode,
+  withGroup,
+} from '@plait/common';
+import { ArrowLineShape, BasicShapes, withDraw } from '@plait/draw';
 import { MindPointerType, MindThemeColors, withMind } from '@plait/mind';
 import MobileDetect from 'mobile-detect';
 import { withMindExtend } from './plugins/with-mind-extend';
@@ -42,9 +47,8 @@ import { LinkPopup } from './components/popup/link-popup/link-popup';
 import { I18nProvider } from './i18n';
 import { Tutorial } from './components/tutorial';
 import { LASER_POINTER_CLASS_NAME } from './utils/laser-pointer';
-import { ArrowLineShape, BasicShapes } from '@plait/draw';
-import { BoardCreationMode, setCreationMode } from '@plait/common';
-import { FreehandShape } from './plugins/freehand/type';
+import { Freehand, FreehandShape } from './plugins/freehand/type';
+import { FREEHAND_MEMORIZE_KEY } from './plugins/freehand/utils';
 
 export type DrawnixIframeControlOptions = {
   enabled?: boolean;
@@ -69,6 +73,20 @@ const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:setTool',
   'set-tool',
   'setTool',
+]);
+
+const DRAWNIX_SET_PEN_COLOR_MESSAGE_TYPES = new Set([
+  'drawnix:set-pen-color',
+  'drawnix:setPenColor',
+  'set-pen-color',
+  'setPenColor',
+]);
+
+const DRAWNIX_SET_PEN_SIZE_MESSAGE_TYPES = new Set([
+  'drawnix:set-pen-size',
+  'drawnix:setPenSize',
+  'set-pen-size',
+  'setPenSize',
 ]);
 
 const DRAWNIX_TOOL_POINTER_MAP: Record<string, DrawnixPointerType> = {
@@ -102,6 +120,45 @@ const getToolFromMessage = (message: Record<string, unknown>) => {
     typeof (message.payload as Record<string, unknown>).tool === 'string'
   ) {
     return (message.payload as Record<string, string>).tool;
+  }
+  return null;
+};
+
+const getPenColorFromMessage = (message: Record<string, unknown>) => {
+  if (typeof message.color === 'string') {
+    return message.color;
+  }
+  if (
+    message.payload &&
+    typeof message.payload === 'object' &&
+    typeof (message.payload as Record<string, unknown>).color === 'string'
+  ) {
+    return (message.payload as Record<string, string>).color;
+  }
+  return null;
+};
+
+const getPenSizeFromMessage = (message: Record<string, unknown>) => {
+  if (typeof message.size === 'number') {
+    return message.size;
+  }
+  if (typeof message.width === 'number') {
+    return message.width;
+  }
+  if (typeof message.strokeWidth === 'number') {
+    return message.strokeWidth;
+  }
+  if (message.payload && typeof message.payload === 'object') {
+    const payload = message.payload as Record<string, unknown>;
+    if (typeof payload.size === 'number') {
+      return payload.size;
+    }
+    if (typeof payload.width === 'number') {
+      return payload.width;
+    }
+    if (typeof payload.strokeWidth === 'number') {
+      return payload.strokeWidth;
+    }
   }
   return null;
 };
@@ -185,23 +242,43 @@ export const Drawnix: React.FC<DrawnixProps> = ({
         return;
       }
       const message = event.data as Record<string, unknown>;
-      if (
-        typeof message.type !== 'string' ||
-        !DRAWNIX_SET_TOOL_MESSAGE_TYPES.has(message.type)
-      ) {
+      if (typeof message.type !== 'string') {
         return;
       }
-      const tool = getToolFromMessage(message);
-      if (!tool) {
+      if (DRAWNIX_SET_TOOL_MESSAGE_TYPES.has(message.type)) {
+        const tool = getToolFromMessage(message);
+        if (!tool) {
+          return;
+        }
+        const pointer = DRAWNIX_TOOL_POINTER_MAP[tool.toLowerCase()];
+        if (!pointer) {
+          return;
+        }
+        setCreationMode(board, BoardCreationMode.drawing);
+        BoardTransforms.updatePointerType(board, pointer);
+        updateAppState({ pointer });
         return;
       }
-      const pointer = DRAWNIX_TOOL_POINTER_MAP[tool.toLowerCase()];
-      if (!pointer) {
+      if (DRAWNIX_SET_PEN_COLOR_MESSAGE_TYPES.has(message.type)) {
+        const color = getPenColorFromMessage(message);
+        if (!color) {
+          return;
+        }
+        memorizeLatest<Freehand>(FREEHAND_MEMORIZE_KEY, 'strokeColor', color);
         return;
       }
-      setCreationMode(board, BoardCreationMode.drawing);
-      BoardTransforms.updatePointerType(board, pointer);
-      updateAppState({ pointer });
+      if (DRAWNIX_SET_PEN_SIZE_MESSAGE_TYPES.has(message.type)) {
+        const size = getPenSizeFromMessage(message);
+        if (typeof size !== 'number' || Number.isNaN(size)) {
+          return;
+        }
+        const normalizedSize = Math.max(1, Math.min(200, size));
+        memorizeLatest<Freehand>(
+          FREEHAND_MEMORIZE_KEY,
+          'strokeWidth',
+          normalizedSize
+        );
+      }
     };
     window.addEventListener('message', onMessage);
     return () => {
