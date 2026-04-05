@@ -99,6 +99,47 @@ drawnix/
 
 近期会高频迭代 drawnix.com，直到发布 *Dawn（破晓）* 版本。
 
+## iframe 嵌入与工具切换
+
+`Drawnix` 支持嵌入模式（隐藏内置工具栏/设置类 UI），并通过 `postMessage` 从父页面切换当前工具。
+
+```tsx
+<Drawnix
+  value={[]}
+  embedded={true}
+  iframeControl={{
+    enabled: true,
+    // 可选：限制消息来源，不传则默认不限制
+    allowedOrigins: ['https://your-host.com'],
+  }}
+/>
+```
+
+父页面控制示例：
+
+```ts
+const iframe = document.getElementById('drawnix-frame') as HTMLIFrameElement;
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-tool',
+    tool: 'pen',
+  },
+  'https://your-drawnix-app.com'
+);
+```
+
+当前支持的 `tool` 值：
+
+- `hand`
+- `selection`
+- `mind`
+- `text`
+- `pen`（别名：`brush` / `feltTipPen`）
+- `eraser`
+- `arrow`
+- `shape`（矩形）
+- `rectangle`
+
 
 ## 开发
 

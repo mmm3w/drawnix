@@ -97,6 +97,47 @@ drawnix/
 
 I will be iterating frequently on *drawnix.com* until the release of the *Dawn* version.
 
+## iframe Embedding and Tool Control
+
+`Drawnix` supports an embedded mode (hides built-in toolbars/settings UI) and can be controlled from the parent page via `postMessage`.
+
+```tsx
+<Drawnix
+  value={[]}
+  embedded={true}
+  iframeControl={{
+    enabled: true,
+    // Optional: only accept messages from trusted origins
+    allowedOrigins: ['https://your-host.com'],
+  }}
+/>
+```
+
+Parent page control example:
+
+```ts
+const iframe = document.getElementById('drawnix-frame') as HTMLIFrameElement;
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-tool',
+    tool: 'pen',
+  },
+  'https://your-drawnix-app.com'
+);
+```
+
+Supported `tool` values:
+
+- `hand`
+- `selection`
+- `mind`
+- `text`
+- `pen` (aliases: `brush` / `feltTipPen`)
+- `eraser`
+- `arrow`
+- `shape` (rectangle)
+- `rectangle`
+
 
 ## Development
 

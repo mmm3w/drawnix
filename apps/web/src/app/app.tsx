@@ -51,7 +51,9 @@ export function App() {
           setTutorial(false);
         }
       }}
+      // embedded={true}
       tutorial={tutorial}
+      iframeControl={{ enabled: true }}
       afterInit={(board) => {
         console.log('board initialized');
 
