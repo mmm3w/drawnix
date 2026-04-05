@@ -193,8 +193,10 @@ const setEraserCursorSize = (board: PlaitBoard, size: number) => {
 
 const setPenCursorSize = (board: PlaitBoard, size: number) => {
   const boardContainer = PlaitBoard.getBoardContainer(board) as HTMLElement;
-  const radius = Math.max(1, Math.min(200, size));
+  const normalizedSize = Math.max(1, Math.min(200, size));
   const strokeWidth = 1.5;
+  // Pen size maps to stroke width, so cursor diameter should match it.
+  const radius = Math.max(1, normalizedSize / 2 - strokeWidth / 2);
   const padding = 2;
   const svgSize = Math.ceil(radius * 2 + strokeWidth * 2 + padding * 2);
   const center = svgSize / 2;
