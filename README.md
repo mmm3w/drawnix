@@ -223,3 +223,15 @@ docker pull pubuzhixing/drawnix:latest
 ## License
 
 [MIT License](https://github.com/plait-board/drawnix/blob/master/LICENSE)  
+
+
+window.addEventListener('message', (event) => {
+  if (event.data?.type === 'drawnix:patch') {
+    const delta = event.data.payload;
+    console.log('delta',delta)
+  }
+  if (event.data?.type === 'drawnix:snapshot') {
+    const snapshot = event.data.payload;
+    console.log('snapshot',snapshot)
+  }
+});

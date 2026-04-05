@@ -58,6 +58,8 @@ import {
 export type DrawnixIframeControlOptions = {
   enabled?: boolean;
   allowedOrigins?: string[];
+  syncTargetOrigin?: string;
+  emitOperationMessage?: boolean;
 };
 
 export type DrawnixToolName =
@@ -72,6 +74,49 @@ export type DrawnixToolName =
   | 'arrow'
   | 'shape'
   | 'rectangle';
+
+export const DRAWNIX_OPERATION_COMPLETE_EVENT = 'drawnix:operation-complete';
+export const DRAWNIX_PATCH_MESSAGE_TYPE = 'drawnix:patch';
+export const DRAWNIX_SNAPSHOT_MESSAGE_TYPE = 'drawnix:snapshot';
+
+const DRAWNIX_GET_SNAPSHOT_MESSAGE_TYPES = new Set([
+  'drawnix:get-snapshot',
+  'drawnix:getSnapshot',
+  'get-snapshot',
+  'getSnapshot',
+]);
+
+export type DrawnixOperationChangeKind =
+  | 'selection'
+  | 'viewport'
+  | 'theme'
+  | 'content'
+  | 'mixed';
+
+export type DrawnixSnapshot = {
+  source: 'drawnix';
+  timestamp: number;
+  children: PlaitElement[];
+  viewport: Viewport;
+  selection: Selection | null;
+  theme: PlaitTheme;
+};
+
+export type DrawnixOperationDelta = {
+  source: 'drawnix';
+  timestamp: number;
+  kind: DrawnixOperationChangeKind;
+  operations: BoardChangeData['operations'];
+  selection: Selection | null;
+  changedElements: PlaitElement[];
+};
+
+export type DrawnixOperationCompleteEventDetail = {
+  source: 'drawnix';
+  timestamp: number;
+  delta: DrawnixOperationDelta;
+  data?: BoardChangeData;
+};
 
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
@@ -225,15 +270,168 @@ const setPenCursorSize = (board: PlaitBoard, size: number) => {
   );
 };
 
+const cloneBoardChangeData = (data: BoardChangeData) => {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(data);
+  }
+  return {
+    ...data,
+    children: [...data.children],
+    operations: [...data.operations],
+  };
+};
+
+const cloneSerializableData = <T,>(value: T): T => {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value);
+  }
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return value;
+  }
+};
+
+const isSelectionOperation = (operation: BoardChangeData['operations'][number]) =>
+  operation.type === 'set_selection';
+
+const isViewportOperation = (operation: BoardChangeData['operations'][number]) =>
+  operation.type === 'set_viewport';
+
+const isThemeOperation = (operation: BoardChangeData['operations'][number]) =>
+  operation.type === 'set_theme';
+
+const getOperationChangeKind = (
+  operations: BoardChangeData['operations']
+): DrawnixOperationChangeKind => {
+  if (operations.every((operation) => isSelectionOperation(operation))) {
+    return 'selection';
+  }
+  if (operations.every((operation) => isViewportOperation(operation))) {
+    return 'viewport';
+  }
+  if (operations.every((operation) => isThemeOperation(operation))) {
+    return 'theme';
+  }
+  if (
+    operations.every(
+      (operation) =>
+        !isSelectionOperation(operation) &&
+        !isViewportOperation(operation) &&
+        !isThemeOperation(operation)
+    )
+  ) {
+    return 'content';
+  }
+  return 'mixed';
+};
+
+const extractChangedElements = (data: BoardChangeData) => {
+  const changedElements: PlaitElement[] = [];
+  const changedElementSet = new Set<PlaitElement>();
+  const addElement = (element: unknown) => {
+    if (!element || typeof element !== 'object') {
+      return;
+    }
+    const plaitElement = element as PlaitElement;
+    if (!changedElementSet.has(plaitElement)) {
+      changedElementSet.add(plaitElement);
+      changedElements.push(plaitElement);
+    }
+  };
+  data.operations.forEach((operation) => {
+    const operationRecord = operation as Record<string, unknown>;
+    if (Array.isArray(operationRecord.path) && typeof operationRecord.path[0] === 'number') {
+      const topLevelIndex = operationRecord.path[0] as number;
+      addElement(data.children[topLevelIndex]);
+    }
+    addElement(operationRecord.node);
+    addElement(operationRecord.newNode);
+  });
+  return cloneSerializableData(changedElements);
+};
+
+const buildOperationDelta = (data: BoardChangeData): DrawnixOperationDelta => {
+  return {
+    source: 'drawnix',
+    timestamp: Date.now(),
+    kind: getOperationChangeKind(data.operations),
+    operations: cloneSerializableData(data.operations),
+    selection: cloneSerializableData(data.selection),
+    changedElements: extractChangedElements(data),
+  };
+};
+
+const buildSnapshotFromBoard = (board: PlaitBoard): DrawnixSnapshot => {
+  return {
+    source: 'drawnix',
+    timestamp: Date.now(),
+    children: cloneSerializableData(board.children),
+    viewport: cloneSerializableData(board.viewport),
+    selection: cloneSerializableData(board.selection),
+    theme: cloneSerializableData(board.theme),
+  };
+};
+
+const getSyncTargetOrigin = (
+  iframeControl: DrawnixIframeControlOptions | undefined
+) => {
+  if (iframeControl?.syncTargetOrigin) {
+    return iframeControl.syncTargetOrigin;
+  }
+  if (iframeControl?.allowedOrigins?.length === 1) {
+    return iframeControl.allowedOrigins[0];
+  }
+  return '*';
+};
+
+const postPatchMessage = (
+  iframeControl: DrawnixIframeControlOptions | undefined,
+  delta: DrawnixOperationDelta
+) => {
+  const message = {
+    type: DRAWNIX_PATCH_MESSAGE_TYPE,
+    payload: delta,
+  };
+  if (window.parent !== window) {
+    window.parent.postMessage(message, getSyncTargetOrigin(iframeControl));
+    return;
+  }
+  window.postMessage(message, window.location.origin);
+};
+
+const emitOperationCompleteEvent = (
+  target: HTMLDivElement | null,
+  eventName: string,
+  detail: DrawnixOperationCompleteEventDetail
+) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const event = new CustomEvent<DrawnixOperationCompleteEventDetail>(eventName, {
+    detail,
+    bubbles: true,
+  });
+  if (target) {
+    target.dispatchEvent(event);
+    return;
+  }
+  window.dispatchEvent(event);
+};
+
 export type DrawnixProps = {
   value: PlaitElement[];
   viewport?: Viewport;
   theme?: PlaitTheme;
   onChange?: (value: BoardChangeData) => void;
+  onOperationComplete?: (detail: DrawnixOperationCompleteEventDetail) => void;
   onSelectionChange?: (selection: Selection | null) => void;
   onValueChange?: (value: PlaitElement[]) => void;
   onViewportChange?: (value: Viewport) => void;
   onThemeChange?: (value: ThemeColorMode) => void;
+  emitOperationCompleteEvent?: boolean;
+  includeFullDataInOperationEvent?: boolean;
+  operationCompleteEventName?: string;
   afterInit?: (board: PlaitBoard) => void;
   tutorial?: boolean;
   embedded?: boolean;
@@ -246,10 +444,14 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   viewport,
   theme,
   onChange,
+  onOperationComplete,
   onSelectionChange,
   onViewportChange,
   onThemeChange,
   onValueChange,
+  emitOperationCompleteEvent: shouldEmitOperationCompleteEvent = true,
+  includeFullDataInOperationEvent = false,
+  operationCompleteEventName = DRAWNIX_OPERATION_COMPLETE_EVENT,
   afterInit,
   tutorial = false,
   embedded = false,
@@ -357,6 +559,17 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           normalizedSize as any
         );
         setEraserCursorSize(board, normalizedSize);
+        return;
+      }
+      if (DRAWNIX_GET_SNAPSHOT_MESSAGE_TYPES.has(message.type)) {
+        const response = {
+          type: DRAWNIX_SNAPSHOT_MESSAGE_TYPE,
+          requestId: message.requestId,
+          payload: buildSnapshotFromBoard(board),
+        };
+        if (event.source && 'postMessage' in event.source) {
+          (event.source as WindowProxy).postMessage(response, event.origin);
+        }
       }
     };
     window.addEventListener('message', onMessage);
@@ -408,6 +621,32 @@ export const Drawnix: React.FC<DrawnixProps> = ({
             plugins={plugins}
             onChange={(data: BoardChangeData) => {
               onChange && onChange(data);
+              if (!data.operations.length) {
+                return;
+              }
+              const delta = buildOperationDelta(data);
+              const detail: DrawnixOperationCompleteEventDetail = {
+                source: 'drawnix',
+                timestamp: Date.now(),
+                delta,
+                data: includeFullDataInOperationEvent
+                  ? cloneBoardChangeData(data)
+                  : undefined,
+              };
+              onOperationComplete && onOperationComplete(detail);
+              if (shouldEmitOperationCompleteEvent) {
+                emitOperationCompleteEvent(
+                  containerRef.current,
+                  operationCompleteEventName,
+                  detail
+                );
+              }
+              if (
+                iframeControlEnabled &&
+                (iframeControl?.emitOperationMessage ?? true)
+              ) {
+                postPatchMessage(iframeControl, delta);
+              }
             }}
             onSelectionChange={onSelectionChange}
             onViewportChange={onViewportChange}
