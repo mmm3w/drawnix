@@ -78,6 +78,8 @@ export type DrawnixToolName =
 export const DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE = 'drawnix:value-change';
 export const DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE = 'drawnix:viewport-change';
 export const DRAWNIX_SELECTION_STATE_MESSAGE_TYPE = 'drawnix:selection-state';
+export const DRAWNIX_CLEAR_OR_DELETE_SELECTION_MESSAGE_TYPE =
+  'drawnix:clear-or-delete-selection';
 
 const DRAWNIX_TRAILING_FLUSH_DELAY = 200;
 
@@ -514,6 +516,15 @@ export const Drawnix: React.FC<DrawnixProps> = ({
             selection: board.selection,
             theme: board.theme,
           });
+        return;
+      }
+      if (message.type === DRAWNIX_CLEAR_OR_DELETE_SELECTION_MESSAGE_TYPE) {
+        const selectedElements = getSelectedElements(board);
+        if (selectedElements.length > 0) {
+          deleteFragment(board);
+        } else if (board.children.length > 0) {
+          board.deleteFragment(board.children);
+        }
         return;
       }
       if (DRAWNIX_SET_TOOL_MESSAGE_TYPES.has(message.type)) {
