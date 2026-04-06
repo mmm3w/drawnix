@@ -376,6 +376,16 @@ export const Drawnix: React.FC<DrawnixProps> = ({
         senderId: syncSenderIdRef.current,
       },
     };
+    const reactNativeWebView = (window as unknown as {
+      ReactNativeWebView?: { postMessage?: (message: string) => void };
+    }).ReactNativeWebView;
+    if (
+      reactNativeWebView &&
+      typeof reactNativeWebView.postMessage === 'function'
+    ) {
+      reactNativeWebView.postMessage(JSON.stringify(messageWithMeta));
+      return;
+    }
     if (window.parent !== window) {
       window.parent.postMessage(
         messageWithMeta,
