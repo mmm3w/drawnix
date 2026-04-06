@@ -1,6 +1,8 @@
 import { Board, BoardChangeData, Wrapper } from '@plait-board/react-board';
 import {
   BoardTransforms,
+  deleteFragment,
+  getSelectedElements,
   PlaitBoard,
   PlaitBoardOptions,
   PlaitElement,
@@ -75,6 +77,7 @@ export type DrawnixToolName =
 
 export const DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE = 'drawnix:value-change';
 export const DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE = 'drawnix:viewport-change';
+export const DRAWNIX_SELECTION_STATE_MESSAGE_TYPE = 'drawnix:selection-state';
 
 const DRAWNIX_TRAILING_FLUSH_DELAY = 200;
 
@@ -90,9 +93,16 @@ export type DrawnixViewportChangeMessage = {
   meta?: { senderId?: string };
 };
 
+export type DrawnixSelectionStateMessage = {
+  type: typeof DRAWNIX_SELECTION_STATE_MESSAGE_TYPE;
+  payload: { hasSelection: boolean };
+  meta?: { senderId?: string };
+};
+
 export type DrawnixSyncMessage =
   | DrawnixValueChangeMessage
-  | DrawnixViewportChangeMessage;
+  | DrawnixViewportChangeMessage
+  | DrawnixSelectionStateMessage;
 
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
@@ -350,10 +360,12 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   });
 
   const [board, setBoard] = useState<DrawnixBoard | null>(null);
+  const boardRef = useRef<DrawnixBoard | null>(null);
 
   if (board) {
     board.appState = appState;
   }
+  boardRef.current = board;
 
   const updateAppState = (newAppState: Partial<DrawnixState>) => {
     setAppState((currentAppState) => ({
@@ -367,6 +379,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   const pendingValueRef = useRef<PlaitElement[] | null>(null);
   const pendingViewportRef = useRef<Viewport | null>(null);
   const trailingFlushTimerRef = useRef<number | null>(null);
+  const lastSelectionStateRef = useRef<boolean | null>(null);
 
   const postSyncMessage = (message: DrawnixSyncMessage) => {
     const messageWithMeta = {
@@ -589,6 +602,18 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     };
   }, []);
 
+  useEffect(() => {
+    if (!iframeControlEnabled || !board) {
+      return;
+    }
+    const hasSelection = getSelectedElements(board).length > 0;
+    lastSelectionStateRef.current = hasSelection;
+    postSyncMessage({
+      type: DRAWNIX_SELECTION_STATE_MESSAGE_TYPE,
+      payload: { hasSelection },
+    });
+  }, [board, iframeControlEnabled]);
+
   const plugins: PlaitPlugin[] = [
     withDraw,
     withGroup,
@@ -621,7 +646,22 @@ export const Drawnix: React.FC<DrawnixProps> = ({
             onChange={(data: BoardChangeData) => {
               onChange && onChange(data);
             }}
-            onSelectionChange={onSelectionChange}
+            onSelectionChange={(selection) => {
+              onSelectionChange && onSelectionChange(selection);
+              const currentBoard = boardRef.current;
+              if (!iframeControlEnabled || !currentBoard) {
+                return;
+              }
+              const hasSelection = getSelectedElements(currentBoard).length > 0;
+              if (lastSelectionStateRef.current === hasSelection) {
+                return;
+              }
+              lastSelectionStateRef.current = hasSelection;
+              postSyncMessage({
+                type: DRAWNIX_SELECTION_STATE_MESSAGE_TYPE,
+                payload: { hasSelection },
+              });
+            }}
             onViewportChange={(nextViewport) => {
               onViewportChange && onViewportChange(nextViewport);
               if (!iframeControlEnabled) {
@@ -642,6 +682,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           >
             <Board
               afterInit={(board) => {
+                boardRef.current = board as DrawnixBoard;
                 setBoard(board as DrawnixBoard);
                 afterInit && afterInit(board);
               }}
