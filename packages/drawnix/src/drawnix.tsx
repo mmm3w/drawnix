@@ -73,6 +73,27 @@ export type DrawnixToolName =
   | 'shape'
   | 'rectangle';
 
+export const DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE = 'drawnix:value-change';
+export const DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE = 'drawnix:viewport-change';
+
+const DRAWNIX_TRAILING_FLUSH_DELAY = 200;
+
+export type DrawnixValueChangeMessage = {
+  type: typeof DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE;
+  payload: { children: PlaitElement[] };
+  meta?: { senderId?: string };
+};
+
+export type DrawnixViewportChangeMessage = {
+  type: typeof DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE;
+  payload: { viewport: Viewport };
+  meta?: { senderId?: string };
+};
+
+export type DrawnixSyncMessage =
+  | DrawnixValueChangeMessage
+  | DrawnixViewportChangeMessage;
+
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
   'drawnix:setTool',
@@ -173,6 +194,33 @@ const getPenSizeFromMessage = (message: Record<string, unknown>) => {
     }
   }
   return null;
+};
+
+const cloneSerializableData = <T,>(value: T): T => {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value);
+  }
+  try {
+    return JSON.parse(JSON.stringify(value)) as T;
+  } catch {
+    return value;
+  }
+};
+
+const getSyncTargetOrigin = (
+  iframeControl: DrawnixIframeControlOptions | undefined
+) => {
+  if ((iframeControl?.allowedOrigins?.length ?? 0) === 1) {
+    return iframeControl?.allowedOrigins?.[0] ?? '*';
+  }
+  return '*';
+};
+
+const createSyncSenderId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `drawnix-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 };
 
 const setEraserCursorSize = (board: PlaitBoard, size: number) => {
@@ -289,6 +337,65 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   };
 
   const iframeControlEnabled = iframeControl?.enabled ?? embedded;
+  const syncSenderIdRef = useRef<string>(createSyncSenderId());
+  const pendingValueRef = useRef<PlaitElement[] | null>(null);
+  const pendingViewportRef = useRef<Viewport | null>(null);
+  const trailingFlushTimerRef = useRef<number | null>(null);
+
+  const postSyncMessage = (message: DrawnixSyncMessage) => {
+    const messageWithMeta = {
+      ...message,
+      meta: {
+        ...(message.meta || {}),
+        senderId: syncSenderIdRef.current,
+      },
+    };
+    if (window.parent !== window) {
+      window.parent.postMessage(
+        messageWithMeta,
+        getSyncTargetOrigin(iframeControl)
+      );
+      return;
+    }
+    window.postMessage(messageWithMeta, window.location.origin);
+  };
+
+  const clearTrailingFlushTimer = () => {
+    if (trailingFlushTimerRef.current !== null) {
+      window.clearTimeout(trailingFlushTimerRef.current);
+      trailingFlushTimerRef.current = null;
+    }
+  };
+
+  const flushPendingChanges = () => {
+    clearTrailingFlushTimer();
+    if (!iframeControlEnabled) {
+      pendingValueRef.current = null;
+      pendingViewportRef.current = null;
+      return;
+    }
+    if (pendingValueRef.current) {
+      postSyncMessage({
+        type: DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE,
+        payload: { children: pendingValueRef.current },
+      });
+      pendingValueRef.current = null;
+    }
+    if (pendingViewportRef.current) {
+      postSyncMessage({
+        type: DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE,
+        payload: { viewport: pendingViewportRef.current },
+      });
+      pendingViewportRef.current = null;
+    }
+  };
+
+  const scheduleTrailingFlush = () => {
+    clearTrailingFlushTimer();
+    trailingFlushTimerRef.current = window.setTimeout(() => {
+      flushPendingChanges();
+    }, DRAWNIX_TRAILING_FLUSH_DELAY);
+  };
 
   useEffect(() => {
     if (!iframeControlEnabled || !board) {
@@ -306,7 +413,58 @@ export const Drawnix: React.FC<DrawnixProps> = ({
         return;
       }
       const message = event.data as Record<string, unknown>;
+      const messageMeta =
+        message.meta && typeof message.meta === 'object'
+          ? (message.meta as Record<string, unknown>)
+          : null;
+      const senderId =
+        messageMeta && typeof messageMeta.senderId === 'string'
+          ? messageMeta.senderId
+          : null;
+      if (senderId && senderId === syncSenderIdRef.current) {
+        return;
+      }
       if (typeof message.type !== 'string') {
+        return;
+      }
+      if (message.type === DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE) {
+        const payload =
+          message.payload && typeof message.payload === 'object'
+            ? (message.payload as Record<string, unknown>)
+            : null;
+        if (!payload || !Array.isArray(payload.children)) {
+          return;
+        }
+        const nextChildren = payload.children as PlaitElement[];
+        onValueChange && onValueChange(cloneSerializableData(nextChildren));
+        onChange &&
+          onChange({
+            children: cloneSerializableData(nextChildren),
+            operations: [],
+            viewport: board.viewport,
+            selection: board.selection,
+            theme: board.theme,
+          });
+        return;
+      }
+      if (message.type === DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE) {
+        const payload =
+          message.payload && typeof message.payload === 'object'
+            ? (message.payload as Record<string, unknown>)
+            : null;
+        if (!payload || !payload.viewport || typeof payload.viewport !== 'object') {
+          return;
+        }
+        const nextViewport = payload.viewport as Viewport;
+        onViewportChange && onViewportChange(cloneSerializableData(nextViewport));
+        onChange &&
+          onChange({
+            children: board.children,
+            operations: [],
+            viewport: cloneSerializableData(nextViewport),
+            selection: board.selection,
+            theme: board.theme,
+          });
         return;
       }
       if (DRAWNIX_SET_TOOL_MESSAGE_TYPES.has(message.type)) {
@@ -377,6 +535,24 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     }
   }, [board, appState.pointer]);
 
+  useEffect(() => {
+    const onPointerEnd = () => {
+      flushPendingChanges();
+    };
+    window.addEventListener('pointerup', onPointerEnd);
+    window.addEventListener('pointercancel', onPointerEnd);
+    return () => {
+      window.removeEventListener('pointerup', onPointerEnd);
+      window.removeEventListener('pointercancel', onPointerEnd);
+    };
+  }, [iframeControlEnabled, iframeControl?.allowedOrigins]);
+
+  useEffect(() => {
+    return () => {
+      clearTrailingFlushTimer();
+    };
+  }, []);
+
   const plugins: PlaitPlugin[] = [
     withDraw,
     withGroup,
@@ -410,9 +586,23 @@ export const Drawnix: React.FC<DrawnixProps> = ({
               onChange && onChange(data);
             }}
             onSelectionChange={onSelectionChange}
-            onViewportChange={onViewportChange}
+            onViewportChange={(nextViewport) => {
+              onViewportChange && onViewportChange(nextViewport);
+              if (!iframeControlEnabled) {
+                return;
+              }
+              pendingViewportRef.current = cloneSerializableData(nextViewport);
+              scheduleTrailingFlush();
+            }}
             onThemeChange={onThemeChange}
-            onValueChange={onValueChange}
+            onValueChange={(nextValue) => {
+              onValueChange && onValueChange(nextValue);
+              if (!iframeControlEnabled) {
+                return;
+              }
+              pendingValueRef.current = cloneSerializableData(nextValue);
+              scheduleTrailingFlush();
+            }}
           >
             <Board
               afterInit={(board) => {
