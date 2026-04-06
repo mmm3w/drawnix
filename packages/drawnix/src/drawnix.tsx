@@ -196,6 +196,32 @@ const getPenSizeFromMessage = (message: Record<string, unknown>) => {
   return null;
 };
 
+const parseIncomingMessage = (rawData: unknown): Record<string, unknown> | null => {
+  if (!rawData) {
+    return null;
+  }
+  if (typeof rawData === 'object') {
+    // Some bridge layers wrap message as { data: ... }.
+    const record = rawData as Record<string, unknown>;
+    if (record.data !== undefined) {
+      const nested = parseIncomingMessage(record.data);
+      if (nested) {
+        return nested;
+      }
+    }
+    return record;
+  }
+  if (typeof rawData === 'string') {
+    try {
+      const parsed = JSON.parse(rawData) as unknown;
+      return parseIncomingMessage(parsed);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
 const cloneSerializableData = <T,>(value: T): T => {
   if (typeof structuredClone === 'function') {
     return structuredClone(value);
@@ -409,10 +435,10 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       if (window.parent !== window && event.source !== window.parent) {
         return;
       }
-      if (!event.data || typeof event.data !== 'object') {
+      const message = parseIncomingMessage(event.data);
+      if (!message) {
         return;
       }
-      const message = event.data as Record<string, unknown>;
       const messageMeta =
         message.meta && typeof message.meta === 'object'
           ? (message.meta as Record<string, unknown>)
