@@ -47,9 +47,9 @@ export function App() {
         const newValue = value as AppValue;
         localforage.setItem(MAIN_BOARD_CONTENT_KEY, newValue);
         setValue(newValue);
-        if (newValue.children && newValue.children.length > 0) {
-          setTutorial(false);
-        }
+        // if (newValue.children && newValue.children.length > 0) {
+        //   setTutorial(false);
+        // }
       }}
       hidePopupToolbar
       // embedded={true}
