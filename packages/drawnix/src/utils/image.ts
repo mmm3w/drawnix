@@ -8,7 +8,7 @@ export const saveAsImage = (board: PlaitBoard, isTransparent: boolean) => {
   const selectedElements = getSelectedElements(board);
   boardToImage(board, {
     elements: selectedElements.length > 0 ? selectedElements : undefined,
-    fillStyle: isTransparent ? 'transparent' : 'white',
+    fillStyle: isTransparent ? 'transparent' : 'black',
   }).then((image) => {
     if (image) {
       const ext = isTransparent ? 'png' : 'jpg';
