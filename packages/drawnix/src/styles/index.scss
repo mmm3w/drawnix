@@ -149,6 +149,12 @@
     }
 }
 
+.drawnix--disabled {
+    .plait-board-container {
+        pointer-events: none;
+    }
+}
+
 .plait-board-container {
     &.pointer-feltTipPen {
         .board-host-svg {

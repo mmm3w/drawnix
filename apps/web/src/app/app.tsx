@@ -35,6 +35,7 @@ export function App() {
       value={value.children}
       viewport={value.viewport}
       theme={value.theme}
+      // disabled
       onChange={(value) => {
         const newValue = value as AppValue;
         localforage.setItem(MAIN_BOARD_CONTENT_KEY, newValue);

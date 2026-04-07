@@ -137,6 +137,13 @@ const DRAWNIX_SET_ERASER_SIZE_MESSAGE_TYPES = new Set([
   'setEraserSize',
 ]);
 
+const DRAWNIX_SET_DISABLED_MESSAGE_TYPES = new Set([
+  'drawnix:set-disabled',
+  'drawnix:setDisabled',
+  'set-disabled',
+  'setDisabled',
+]);
+
 const DRAWNIX_TOOL_POINTER_MAP: Record<string, DrawnixPointerType> = {
   hand: PlaitPointerType.hand,
   selection: PlaitPointerType.selection,
@@ -206,6 +213,31 @@ const getPenSizeFromMessage = (message: Record<string, unknown>) => {
     }
     if (typeof payload.strokeWidth === 'number') {
       return payload.strokeWidth;
+    }
+  }
+  return null;
+};
+
+const getDisabledFromMessage = (message: Record<string, unknown>) => {
+  if (typeof message.disabled === 'boolean') {
+    return message.disabled;
+  }
+  if (typeof message.readonly === 'boolean') {
+    return message.readonly;
+  }
+  if (typeof message.enabled === 'boolean') {
+    return !message.enabled;
+  }
+  if (message.payload && typeof message.payload === 'object') {
+    const payload = message.payload as Record<string, unknown>;
+    if (typeof payload.disabled === 'boolean') {
+      return payload.disabled;
+    }
+    if (typeof payload.readonly === 'boolean') {
+      return payload.readonly;
+    }
+    if (typeof payload.enabled === 'boolean') {
+      return !payload.enabled;
     }
   }
   return null;
@@ -318,6 +350,7 @@ export type DrawnixProps = {
   value: PlaitElement[];
   viewport?: Viewport;
   theme?: PlaitTheme;
+  disabled?: boolean;
   onChange?: (value: BoardChangeData) => void;
   onSelectionChange?: (selection: Selection | null) => void;
   onValueChange?: (value: PlaitElement[]) => void;
@@ -340,13 +373,15 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   onThemeChange,
   onValueChange,
   afterInit,
+  disabled = false,
   tutorial = false,
   embedded = false,
   iframeControl,
   hidePopupToolbar = false,
 }) => {
+  const [runtimeDisabled, setRuntimeDisabled] = useState(disabled);
   const options: PlaitBoardOptions = {
-    readonly: false,
+    readonly: runtimeDisabled,
     hideScrollbar: false,
     disabledScrollOnNonFocus: false,
     themeColors: MindThemeColors,
@@ -589,6 +624,14 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           normalizedSize as any
         );
         setEraserCursorSize(board, normalizedSize);
+        return;
+      }
+      if (DRAWNIX_SET_DISABLED_MESSAGE_TYPES.has(message.type)) {
+        const nextDisabled = getDisabledFromMessage(message);
+        if (typeof nextDisabled !== 'boolean') {
+          return;
+        }
+        setRuntimeDisabled(nextDisabled);
       }
     };
     window.addEventListener('message', onMessage);
@@ -596,6 +639,20 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       window.removeEventListener('message', onMessage);
     };
   }, [board, iframeControlEnabled, iframeControl?.allowedOrigins]);
+
+  useEffect(() => {
+    setRuntimeDisabled(disabled);
+  }, [disabled]);
+
+  useEffect(() => {
+    if (!board) {
+      return;
+    }
+    board.options = {
+      ...board.options,
+      readonly: runtimeDisabled,
+    };
+  }, [board, runtimeDisabled]);
 
   useEffect(() => {
     if (!board) {
@@ -659,6 +716,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
         <div
           className={classNames('drawnix', {
             'drawnix--mobile': appState.isMobile,
+            'drawnix--disabled': runtimeDisabled,
           })}
           ref={containerRef}
         >
@@ -708,18 +766,23 @@ export const Drawnix: React.FC<DrawnixProps> = ({
             <Board
               afterInit={(board) => {
                 boardRef.current = board as DrawnixBoard;
+                (board as DrawnixBoard).options = {
+                  ...(board as DrawnixBoard).options,
+                  readonly: runtimeDisabled,
+                };
                 setBoard(board as DrawnixBoard);
                 afterInit && afterInit(board);
               }}
             >
               {!embedded &&
+                !runtimeDisabled &&
                 tutorial &&
                 board &&
                 PlaitBoard.isPointer(board, PlaitPointerType.selection) && (
                   <Tutorial />
                 )}
             </Board>
-            {!embedded && (
+            {!embedded && !runtimeDisabled && (
               <>
                 <AppToolbar></AppToolbar>
                 <CreationToolbar></CreationToolbar>
