@@ -56,6 +56,7 @@ import {
   getEraserSize,
   getPenSize,
 } from './plugins/freehand/utils';
+import { saveAsImage } from './utils';
 
 export type DrawnixIframeControlOptions = {
   enabled?: boolean;
@@ -81,6 +82,8 @@ export const DRAWNIX_SELECTION_STATE_MESSAGE_TYPE = 'drawnix:selection-state';
 export const DRAWNIX_LOADED_MESSAGE_TYPE = 'drawnix:loaded';
 export const DRAWNIX_DELETE_SELECTION_MESSAGE_TYPE = 'drawnix:delete-selection';
 export const DRAWNIX_CLEAR_BOARD_MESSAGE_TYPE = 'drawnix:clear-board';
+export const DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPE =
+  'drawnix:export-image-request';
 // Keep the old message for backward compatibility.
 export const DRAWNIX_CLEAR_OR_DELETE_SELECTION_MESSAGE_TYPE =
   'drawnix:clear-or-delete-selection';
@@ -150,6 +153,14 @@ const DRAWNIX_SET_DISABLED_MESSAGE_TYPES = new Set([
   'drawnix:setDisabled',
   'set-disabled',
   'setDisabled',
+]);
+
+const DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPES = new Set([
+  DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPE,
+  'drawnix:export-image',
+  'drawnix:exportImage',
+  'export-image',
+  'exportImage',
 ]);
 
 const DRAWNIX_TOOL_POINTER_MAP: Record<string, DrawnixPointerType> = {
@@ -249,6 +260,34 @@ const getDisabledFromMessage = (message: Record<string, unknown>) => {
     }
   }
   return null;
+};
+
+const getExportImageTransparentFromMessage = (
+  message: Record<string, unknown>
+) => {
+  if (typeof message.transparent === 'boolean') {
+    return message.transparent;
+  }
+  if (typeof message.isTransparent === 'boolean') {
+    return message.isTransparent;
+  }
+  if (typeof message.format === 'string') {
+    return message.format.toLowerCase() !== 'jpg';
+  }
+  if (message.payload && typeof message.payload === 'object') {
+    const payload = message.payload as Record<string, unknown>;
+    if (typeof payload.transparent === 'boolean') {
+      return payload.transparent;
+    }
+    if (typeof payload.isTransparent === 'boolean') {
+      return payload.isTransparent;
+    }
+    if (typeof payload.format === 'string') {
+      return payload.format.toLowerCase() !== 'jpg';
+    }
+  }
+  // Default to png/transparent to match existing toolbar behavior.
+  return true;
 };
 
 const parseIncomingMessage = (rawData: unknown): Record<string, unknown> | null => {
@@ -640,6 +679,11 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           return;
         }
         setRuntimeDisabled(nextDisabled);
+        return;
+      }
+      if (DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPES.has(message.type)) {
+        const isTransparent = getExportImageTransparentFromMessage(message);
+        saveAsImage(board, isTransparent);
       }
     };
     window.addEventListener('message', onMessage);
