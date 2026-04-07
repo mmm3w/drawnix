@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Drawnix } from '@drawnix/drawnix';
-import { PlaitBoard, PlaitElement, PlaitTheme, Viewport } from '@plait/core';
+import {
+  PlaitBoard,
+  PlaitElement,
+  PlaitTheme,
+  ThemeColorMode,
+  Viewport,
+} from '@plait/core';
 import localforage from 'localforage';
 
 type AppValue = {
@@ -18,26 +24,12 @@ localforage.config({
 });
 
 export function App() {
-  const [value, setValue] = useState<AppValue>({ children: [] });
+  const [value, setValue] = useState<AppValue>({
+    children: [],
+    theme: { themeColorMode: ThemeColorMode.dark },
+  });
 
-  const [tutorial, setTutorial] = useState(false);
-
-  useEffect(() => {
-    const loadData = async () => {
-      const storedData = (await localforage.getItem(
-        MAIN_BOARD_CONTENT_KEY
-      )) as AppValue;
-      if (storedData) {
-        setValue(storedData);
-        if (storedData.children && storedData.children.length === 0) {
-          setTutorial(true);
-        }
-        return;
-      }
-      setTutorial(true);
-    };
-    loadData();
-  }, []);
+  const [tutorial] = useState(true);
   return (
     <Drawnix
       value={value.children}
@@ -51,20 +43,9 @@ export function App() {
         //   setTutorial(false);
         // }
       }}
-      hidePopupToolbar
+      // hidePopupToolbar
       // embedded={true}
-      tutorial={tutorial}
       iframeControl={{ enabled: true }}
-      afterInit={(board) => {
-        console.log('board initialized');
-
-        // console.log(
-        //   `add __drawnix__web__debug_log to window, so you can call add log anywhere, like: window.__drawnix__web__console('some thing')`
-        // );
-        // (window as any)['__drawnix__web__console'] = (value: string) => {
-        //   addDebugLog(board, value);
-        // };
-      }}
     ></Drawnix>
   );
 }
