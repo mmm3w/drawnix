@@ -78,6 +78,7 @@ export type DrawnixToolName =
 export const DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE = 'drawnix:value-change';
 export const DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE = 'drawnix:viewport-change';
 export const DRAWNIX_SELECTION_STATE_MESSAGE_TYPE = 'drawnix:selection-state';
+export const DRAWNIX_LOADED_MESSAGE_TYPE = 'drawnix:loaded';
 export const DRAWNIX_DELETE_SELECTION_MESSAGE_TYPE = 'drawnix:delete-selection';
 export const DRAWNIX_CLEAR_BOARD_MESSAGE_TYPE = 'drawnix:clear-board';
 // Keep the old message for backward compatibility.
@@ -104,10 +105,17 @@ export type DrawnixSelectionStateMessage = {
   meta?: { senderId?: string };
 };
 
+export type DrawnixLoadedMessage = {
+  type: typeof DRAWNIX_LOADED_MESSAGE_TYPE;
+  payload: { loaded: true };
+  meta?: { senderId?: string };
+};
+
 export type DrawnixSyncMessage =
   | DrawnixValueChangeMessage
   | DrawnixViewportChangeMessage
-  | DrawnixSelectionStateMessage;
+  | DrawnixSelectionStateMessage
+  | DrawnixLoadedMessage;
 
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
@@ -771,6 +779,12 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                   readonly: runtimeDisabled,
                 };
                 setBoard(board as DrawnixBoard);
+                if (iframeControlEnabled) {
+                  postSyncMessage({
+                    type: DRAWNIX_LOADED_MESSAGE_TYPE,
+                    payload: { loaded: true },
+                  });
+                }
                 afterInit && afterInit(board);
               }}
             >

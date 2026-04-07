@@ -114,6 +114,16 @@ I will be iterating frequently on *drawnix.com* until the release of the *Dawn* 
 />
 ```
 
+Listen for whiteboard loaded event:
+
+```ts
+window.addEventListener('message', (event) => {
+  if (event.data?.type === 'drawnix:loaded') {
+    // Whiteboard initialization is complete
+  }
+});
+```
+
 Parent page control example:
 
 ```ts

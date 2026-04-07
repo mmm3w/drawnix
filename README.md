@@ -116,6 +116,16 @@ drawnix/
 />
 ```
 
+监听白板加载完成：
+
+```ts
+window.addEventListener('message', (event) => {
+  if (event.data?.type === 'drawnix:loaded') {
+    // 白板初始化完成
+  }
+});
+```
+
 父页面控制示例：
 
 ```ts

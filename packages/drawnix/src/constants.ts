@@ -49,6 +49,8 @@ export const MIME_TYPES = {
   ...IMAGE_MIME_TYPES,
 } as const;
 
+export const DRAWNIX_EXPORT_IMAGE_MESSAGE_TYPE = 'drawnix:export-image';
+
 export const VERSIONS = {
   drawnix: 1,
 } as const;
