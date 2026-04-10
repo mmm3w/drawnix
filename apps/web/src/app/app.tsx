@@ -38,8 +38,8 @@ export function App() {
       //   // const newValue = value as AppValue;
       //   // const serializedValue = JSON.stringify(newValue);
       // }}
-      // hidePopupToolbar
-      // embedded={true}
+      hidePopupToolbar
+      embedded={true}
       iframeControl={{ enabled: true }}
     ></Drawnix>
   );
