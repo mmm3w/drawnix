@@ -91,7 +91,7 @@ export type DrawnixLoadedMessage = {
 
 export type DrawnixChangeMessage = {
   type: typeof DRAWNIX_CHANGE_MESSAGE_TYPE;
-  payload: BoardChangeData;
+  payload: Pick<BoardChangeData, 'children' | 'viewport'>;
   meta?: { senderId?: string };
 };
 
@@ -441,7 +441,14 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   const iframeControlEnabled = iframeControl?.enabled ?? embedded;
   const syncSenderIdRef = useRef<string>(createSyncSenderId());
 
+  // Refs for debouncing change events
+  const lastSentDataRef = useRef<{ children: PlaitElement[]; viewport: Viewport } | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDataRef = useRef<{ children: PlaitElement[]; viewport: Viewport } | null>(null);
+  const DEBOUNCE_DELAY = 200; // ms
+
   const postSyncMessage = (message: DrawnixSyncMessage) => {
+    console.log('postSyncMessage', message);
     const messageWithMeta = {
       ...message,
       meta: {
@@ -583,6 +590,15 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     setRuntimeDisabled(disabled);
   }, [disabled]);
 
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!board) {
       return;
@@ -640,10 +656,40 @@ export const Drawnix: React.FC<DrawnixProps> = ({
             onChange={(data: BoardChangeData) => {
               onChange && onChange(data);
               if (iframeControlEnabled) {
-                postSyncMessage({
-                  type: DRAWNIX_CHANGE_MESSAGE_TYPE,
-                  payload: cloneSerializableData(data),
-                });
+                const currentData = {
+                  children: data.children,
+                  viewport: data.viewport,
+                };
+
+                // Check if data actually changed
+                const lastSent = lastSentDataRef.current;
+                const isChildrenEqual = lastSent && JSON.stringify(lastSent.children) === JSON.stringify(currentData.children);
+                const isViewportEqual = lastSent && JSON.stringify(lastSent.viewport) === JSON.stringify(currentData.viewport);
+
+                if (isChildrenEqual && isViewportEqual) {
+                  return; // No change, skip sending
+                }
+
+                // Store as pending data
+                pendingDataRef.current = currentData;
+
+                // Clear existing timer
+                if (debounceTimerRef.current) {
+                  clearTimeout(debounceTimerRef.current);
+                }
+
+                // Set new timer to send data after delay
+                debounceTimerRef.current = setTimeout(() => {
+                  const pending = pendingDataRef.current;
+                  if (pending) {
+                    postSyncMessage({
+                      type: DRAWNIX_CHANGE_MESSAGE_TYPE,
+                      payload: cloneSerializableData(pending),
+                    });
+                    lastSentDataRef.current = pending;
+                    pendingDataRef.current = null;
+                  }
+                }, DEBOUNCE_DELAY);
               }
             }}
             onSelectionChange={onSelectionChange}
