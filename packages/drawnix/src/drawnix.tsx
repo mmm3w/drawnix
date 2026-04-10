@@ -665,7 +665,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     buildTextLinkPlugin(updateAppState),
   ];
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement|null>(null);
 
   return (
     <I18nProvider>
@@ -743,15 +743,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                 }
                 afterInit && afterInit(board);
               }}
-            >
-              {!embedded &&
-                !runtimeDisabled &&
-                tutorial &&
-                board &&
-                PlaitBoard.isPointer(board, PlaitPointerType.selection) && (
-                  <Tutorial />
-                )}
-            </Board>
+            />
             {!embedded && !runtimeDisabled && (
               <>
                 <AppToolbar></AppToolbar>
