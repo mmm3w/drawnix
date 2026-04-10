@@ -29,21 +29,15 @@ export function App() {
     theme: { themeColorMode: ThemeColorMode.dark },
   });
 
-  const [tutorial] = useState(true);
   return (
     <Drawnix
       value={value.children}
       viewport={value.viewport}
       theme={value.theme}
-      // disabled
-      onChange={(value) => {
-        const newValue = value as AppValue;
-        localforage.setItem(MAIN_BOARD_CONTENT_KEY, newValue);
-        setValue(newValue);
-        // if (newValue.children && newValue.children.length > 0) {
-        //   setTutorial(false);
-        // }
-      }}
+      // onChange={(value) => {
+      //   // const newValue = value as AppValue;
+      //   // const serializedValue = JSON.stringify(newValue);
+      // }}
       // hidePopupToolbar
       // embedded={true}
       iframeControl={{ enabled: true }}

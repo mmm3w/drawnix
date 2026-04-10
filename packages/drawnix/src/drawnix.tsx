@@ -76,37 +76,12 @@ export type DrawnixToolName =
   | 'shape'
   | 'rectangle';
 
-export const DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE = 'drawnix:value-change';
-export const DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE = 'drawnix:viewport-change';
-export const DRAWNIX_SELECTION_STATE_MESSAGE_TYPE = 'drawnix:selection-state';
 export const DRAWNIX_LOADED_MESSAGE_TYPE = 'drawnix:loaded';
 export const DRAWNIX_DELETE_SELECTION_MESSAGE_TYPE = 'drawnix:delete-selection';
 export const DRAWNIX_CLEAR_BOARD_MESSAGE_TYPE = 'drawnix:clear-board';
 export const DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPE =
   'drawnix:export-image-request';
-// Keep the old message for backward compatibility.
-export const DRAWNIX_CLEAR_OR_DELETE_SELECTION_MESSAGE_TYPE =
-  'drawnix:clear-or-delete-selection';
-
-const DRAWNIX_TRAILING_FLUSH_DELAY = 200;
-
-export type DrawnixValueChangeMessage = {
-  type: typeof DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE;
-  payload: { children: PlaitElement[] };
-  meta?: { senderId?: string };
-};
-
-export type DrawnixViewportChangeMessage = {
-  type: typeof DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE;
-  payload: { viewport: Viewport };
-  meta?: { senderId?: string };
-};
-
-export type DrawnixSelectionStateMessage = {
-  type: typeof DRAWNIX_SELECTION_STATE_MESSAGE_TYPE;
-  payload: { hasSelection: boolean };
-  meta?: { senderId?: string };
-};
+export const DRAWNIX_CHANGE_MESSAGE_TYPE = 'drawnix:change';
 
 export type DrawnixLoadedMessage = {
   type: typeof DRAWNIX_LOADED_MESSAGE_TYPE;
@@ -114,11 +89,13 @@ export type DrawnixLoadedMessage = {
   meta?: { senderId?: string };
 };
 
-export type DrawnixSyncMessage =
-  | DrawnixValueChangeMessage
-  | DrawnixViewportChangeMessage
-  | DrawnixSelectionStateMessage
-  | DrawnixLoadedMessage;
+export type DrawnixChangeMessage = {
+  type: typeof DRAWNIX_CHANGE_MESSAGE_TYPE;
+  payload: BoardChangeData;
+  meta?: { senderId?: string };
+};
+
+export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage;
 
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
@@ -463,10 +440,6 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
   const iframeControlEnabled = iframeControl?.enabled ?? embedded;
   const syncSenderIdRef = useRef<string>(createSyncSenderId());
-  const pendingValueRef = useRef<PlaitElement[] | null>(null);
-  const pendingViewportRef = useRef<Viewport | null>(null);
-  const trailingFlushTimerRef = useRef<number | null>(null);
-  const lastSelectionStateRef = useRef<boolean | null>(null);
 
   const postSyncMessage = (message: DrawnixSyncMessage) => {
     const messageWithMeta = {
@@ -494,43 +467,6 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       return;
     }
     window.postMessage(messageWithMeta, window.location.origin);
-  };
-
-  const clearTrailingFlushTimer = () => {
-    if (trailingFlushTimerRef.current !== null) {
-      window.clearTimeout(trailingFlushTimerRef.current);
-      trailingFlushTimerRef.current = null;
-    }
-  };
-
-  const flushPendingChanges = () => {
-    clearTrailingFlushTimer();
-    if (!iframeControlEnabled) {
-      pendingValueRef.current = null;
-      pendingViewportRef.current = null;
-      return;
-    }
-    if (pendingValueRef.current) {
-      postSyncMessage({
-        type: DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE,
-        payload: { children: pendingValueRef.current },
-      });
-      pendingValueRef.current = null;
-    }
-    if (pendingViewportRef.current) {
-      postSyncMessage({
-        type: DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE,
-        payload: { viewport: pendingViewportRef.current },
-      });
-      pendingViewportRef.current = null;
-    }
-  };
-
-  const scheduleTrailingFlush = () => {
-    clearTrailingFlushTimer();
-    trailingFlushTimerRef.current = window.setTimeout(() => {
-      flushPendingChanges();
-    }, DRAWNIX_TRAILING_FLUSH_DELAY);
   };
 
   useEffect(() => {
@@ -563,46 +499,6 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       if (typeof message.type !== 'string') {
         return;
       }
-      if (message.type === DRAWNIX_VALUE_CHANGE_MESSAGE_TYPE) {
-        const payload =
-          message.payload && typeof message.payload === 'object'
-            ? (message.payload as Record<string, unknown>)
-            : null;
-        if (!payload || !Array.isArray(payload.children)) {
-          return;
-        }
-        const nextChildren = payload.children as PlaitElement[];
-        onValueChange && onValueChange(cloneSerializableData(nextChildren));
-        onChange &&
-          onChange({
-            children: cloneSerializableData(nextChildren),
-            operations: [],
-            viewport: board.viewport,
-            selection: board.selection,
-            theme: board.theme,
-          });
-        return;
-      }
-      if (message.type === DRAWNIX_VIEWPORT_CHANGE_MESSAGE_TYPE) {
-        const payload =
-          message.payload && typeof message.payload === 'object'
-            ? (message.payload as Record<string, unknown>)
-            : null;
-        if (!payload || !payload.viewport || typeof payload.viewport !== 'object') {
-          return;
-        }
-        const nextViewport = payload.viewport as Viewport;
-        onViewportChange && onViewportChange(cloneSerializableData(nextViewport));
-        onChange &&
-          onChange({
-            children: board.children,
-            operations: [],
-            viewport: cloneSerializableData(nextViewport),
-            selection: board.selection,
-            theme: board.theme,
-          });
-        return;
-      }
       if (message.type === DRAWNIX_DELETE_SELECTION_MESSAGE_TYPE) {
         const selectedElements = getSelectedElements(board);
         if (selectedElements.length > 0) {
@@ -612,15 +508,6 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       }
       if (message.type === DRAWNIX_CLEAR_BOARD_MESSAGE_TYPE) {
         board.deleteFragment(board.children);
-        return;
-      }
-      if (message.type === DRAWNIX_CLEAR_OR_DELETE_SELECTION_MESSAGE_TYPE) {
-        const selectedElements = getSelectedElements(board);
-        if (selectedElements.length > 0) {
-          deleteFragment(board);
-        } else if (board.children.length > 0) {
-          board.deleteFragment(board.children);
-        }
         return;
       }
       if (DRAWNIX_SET_TOOL_MESSAGE_TYPES.has(message.type)) {
@@ -718,35 +605,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     }
   }, [board, appState.pointer]);
 
-  useEffect(() => {
-    const onPointerEnd = () => {
-      flushPendingChanges();
-    };
-    window.addEventListener('pointerup', onPointerEnd);
-    window.addEventListener('pointercancel', onPointerEnd);
-    return () => {
-      window.removeEventListener('pointerup', onPointerEnd);
-      window.removeEventListener('pointercancel', onPointerEnd);
-    };
-  }, [iframeControlEnabled, iframeControl?.allowedOrigins]);
 
-  useEffect(() => {
-    return () => {
-      clearTrailingFlushTimer();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!iframeControlEnabled || !board) {
-      return;
-    }
-    const hasSelection = getSelectedElements(board).length > 0;
-    lastSelectionStateRef.current = hasSelection;
-    postSyncMessage({
-      type: DRAWNIX_SELECTION_STATE_MESSAGE_TYPE,
-      payload: { hasSelection },
-    });
-  }, [board, iframeControlEnabled]);
 
   const plugins: PlaitPlugin[] = [
     withDraw,
@@ -780,40 +639,17 @@ export const Drawnix: React.FC<DrawnixProps> = ({
             plugins={plugins}
             onChange={(data: BoardChangeData) => {
               onChange && onChange(data);
-            }}
-            onSelectionChange={(selection) => {
-              onSelectionChange && onSelectionChange(selection);
-              const currentBoard = boardRef.current;
-              if (!iframeControlEnabled || !currentBoard) {
-                return;
+              if (iframeControlEnabled) {
+                postSyncMessage({
+                  type: DRAWNIX_CHANGE_MESSAGE_TYPE,
+                  payload: cloneSerializableData(data),
+                });
               }
-              const hasSelection = getSelectedElements(currentBoard).length > 0;
-              if (lastSelectionStateRef.current === hasSelection) {
-                return;
-              }
-              lastSelectionStateRef.current = hasSelection;
-              postSyncMessage({
-                type: DRAWNIX_SELECTION_STATE_MESSAGE_TYPE,
-                payload: { hasSelection },
-              });
             }}
-            onViewportChange={(nextViewport) => {
-              onViewportChange && onViewportChange(nextViewport);
-              if (!iframeControlEnabled) {
-                return;
-              }
-              pendingViewportRef.current = cloneSerializableData(nextViewport);
-              scheduleTrailingFlush();
-            }}
+            onSelectionChange={onSelectionChange}
+            onViewportChange={onViewportChange}
             onThemeChange={onThemeChange}
-            onValueChange={(nextValue) => {
-              onValueChange && onValueChange(nextValue);
-              if (!iframeControlEnabled) {
-                return;
-              }
-              pendingValueRef.current = cloneSerializableData(nextValue);
-              scheduleTrailingFlush();
-            }}
+            onValueChange={onValueChange}
           >
             <Board
               afterInit={(board) => {
