@@ -203,6 +203,24 @@ export const Wrapper: React.FC<WrapperProps> = ({
     }
   }, [value]);
 
+  // Handle external viewport updates
+  useEffect(() => {
+    if (isFirstRender.current) {
+      return;
+    }
+
+    if (viewport && viewport !== board.viewport && !FLUSHING.get(board)) {
+      board.viewport = viewport;
+      initializeViewBox(board);
+      updateViewportOffset(board);
+      listRender.update(board.children, {
+        board: board,
+        parent: board,
+        parentG: PlaitBoard.getElementHost(board),
+      });
+    }
+  }, [viewport]);
+
   return (
     <BoardContext.Provider value={context}>{children}</BoardContext.Provider>
   );

@@ -82,6 +82,7 @@ export const DRAWNIX_CLEAR_BOARD_MESSAGE_TYPE = 'drawnix:clear-board';
 export const DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPE =
   'drawnix:export-image-request';
 export const DRAWNIX_CHANGE_MESSAGE_TYPE = 'drawnix:change';
+export const DRAWNIX_UPDATE_DATA_MESSAGE_TYPE = 'drawnix:update-data';
 
 export type DrawnixLoadedMessage = {
   type: typeof DRAWNIX_LOADED_MESSAGE_TYPE;
@@ -95,7 +96,16 @@ export type DrawnixChangeMessage = {
   meta?: { senderId?: string };
 };
 
-export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage;
+export type DrawnixUpdateDataMessage = {
+  type: typeof DRAWNIX_UPDATE_DATA_MESSAGE_TYPE;
+  payload: {
+    children?: PlaitElement[];
+    viewport?: Viewport;
+  };
+  meta?: { senderId?: string };
+};
+
+export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage | DrawnixUpdateDataMessage;
 
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
@@ -426,6 +436,14 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   const [board, setBoard] = useState<DrawnixBoard | null>(null);
   const boardRef = useRef<DrawnixBoard | null>(null);
 
+  // State for external data updates
+  const [externalValue, setExternalValue] = useState<PlaitElement[] | undefined>(undefined);
+  const [externalViewport, setExternalViewport] = useState<Viewport | undefined>(undefined);
+
+  // Merge external data with props
+  const mergedValue = externalValue ?? value;
+  const mergedViewport = externalViewport ?? viewport;
+
   if (board) {
     board.appState = appState;
   }
@@ -578,6 +596,18 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       if (DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPES.has(message.type)) {
         const isTransparent = getExportImageTransparentFromMessage(message);
         saveAsImage(board, isTransparent);
+        return;
+      }
+      if (message.type === DRAWNIX_UPDATE_DATA_MESSAGE_TYPE) {
+        const updateMessage = message as DrawnixUpdateDataMessage;
+        const { children: newChildren, viewport: newViewport } = updateMessage.payload;
+        if (newChildren !== undefined) {
+          setExternalValue(newChildren);
+        }
+        if (newViewport !== undefined) {
+          setExternalViewport(newViewport);
+        }
+        return;
       }
     };
     window.addEventListener('message', onMessage);
@@ -648,8 +678,8 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           ref={containerRef}
         >
           <Wrapper
-            value={value}
-            viewport={viewport}
+            value={mergedValue}
+            viewport={mergedViewport}
             theme={theme}
             options={options}
             plugins={plugins}
