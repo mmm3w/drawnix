@@ -152,6 +152,7 @@
 .drawnix--disabled {
     .plait-board-container {
         pointer-events: none;
+        touch-action: none;
     }
 }
 
