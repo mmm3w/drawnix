@@ -39,6 +39,7 @@ export function App() {
       //   // const serializedValue = JSON.stringify(newValue);
       // }}
       hidePopupToolbar
+      // disabled
       embedded={true}
       iframeControl={{ enabled: true }}
     ></Drawnix>
