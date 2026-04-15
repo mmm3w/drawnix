@@ -6,6 +6,7 @@ import {
   PlaitBoard,
   PlaitBoardOptions,
   PlaitElement,
+  PlaitOperation,
   PlaitPlugin,
   PlaitPointerType,
   PlaitTheme,
@@ -49,6 +50,154 @@ import { LinkPopup } from './components/popup/link-popup/link-popup';
 import { I18nProvider } from './i18n';
 import { Tutorial } from './components/tutorial';
 import { LASER_POINTER_CLASS_NAME } from './utils/laser-pointer';
+
+// 调试组件：用于测试 DRAWNIX_UPDATE_DATA_MESSAGE_TYPE 事件的 viewport 参数
+const ViewportDebugPanel: React.FC = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(0);
+  const [zoom, setZoom] = useState(1);
+
+  const handleSendUpdateData = () => {
+    const message: DrawnixUpdateDataMessage = {
+      type: DRAWNIX_UPDATE_DATA_MESSAGE_TYPE,
+      payload: {
+        viewport: {
+          origination:[offsetX, offsetY],
+          zoom,
+        },
+      },
+    };
+    window.postMessage(message, window.location.origin);
+    console.log('[ViewportDebug] Sent DRAWNIX_UPDATE_DATA_MESSAGE_TYPE:', message);
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: '80px',
+        right: '10px',
+        zIndex: 9999,
+        backgroundColor: '#fff',
+        border: '1px solid #ccc',
+        borderRadius: '4px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        padding: isOpen ? '12px' : '8px',
+        minWidth: isOpen ? '200px' : 'auto',
+      }}
+    >
+      {!isOpen ? (
+        <button
+          onClick={() => setIsOpen(true)}
+          style={{
+            background: '#1890ff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            fontSize: '12px',
+          }}
+        >
+          调试 Viewport
+        </button>
+      ) : (
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '10px',
+            }}
+          >
+            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Viewport 调试</span>
+            <button
+              onClick={() => setIsOpen(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '16px',
+                color: '#999',
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>
+              offsetX:
+            </label>
+            <input
+              type="number"
+              value={offsetX}
+              onChange={(e) => setOffsetX(Number(e.target.value))}
+              style={{
+                width: '100%',
+                padding: '4px',
+                fontSize: '12px',
+                border: '1px solid #d9d9d9',
+                borderRadius: '2px',
+              }}
+            />
+          </div>
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>
+              offsetY:
+            </label>
+            <input
+              type="number"
+              value={offsetY}
+              onChange={(e) => setOffsetY(Number(e.target.value))}
+              style={{
+                width: '100%',
+                padding: '4px',
+                fontSize: '12px',
+                border: '1px solid #d9d9d9',
+                borderRadius: '2px',
+              }}
+            />
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+            <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>
+              zoom:
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              style={{
+                width: '100%',
+                padding: '4px',
+                fontSize: '12px',
+                border: '1px solid #d9d9d9',
+                borderRadius: '2px',
+              }}
+            />
+          </div>
+          <button
+            onClick={handleSendUpdateData}
+            style={{
+              width: '100%',
+              background: '#52c41a',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '6px',
+              cursor: 'pointer',
+              fontSize: '12px',
+            }}
+          >
+            发送 UpdateData
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 import { Freehand, FreehandShape } from './plugins/freehand/type';
 import {
   ERASER_MEMORIZE_KEY,
@@ -460,10 +609,136 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   const syncSenderIdRef = useRef<string>(createSyncSenderId());
 
   // Refs for debouncing change events
-  const lastSentDataRef = useRef<{ children: PlaitElement[]; viewport: Viewport } | null>(null);
+  const lastSentDataRef = useRef<{
+    children: PlaitElement[];
+    operations: PlaitOperation[];
+    viewport: Viewport;
+    selection: Selection | null;
+  } | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingDataRef = useRef<{ children: PlaitElement[]; viewport: Viewport } | null>(null);
+  const pendingDataRef = useRef<{
+    children: PlaitElement[];
+    operations: PlaitOperation[];
+    viewport: Viewport;
+    selection: Selection | null;
+  } | null>(null);
   const DEBOUNCE_DELAY = 200; // ms
+
+  // 判断是否为 set_node 操作
+  const isSetNodeOperation = (op: PlaitOperation): boolean => {
+    return (op as any).type === 'set_node';
+  };
+
+  // 获取操作的 Path（用于 set_node）
+  const getOperationPath = (op: PlaitOperation): string | null => {
+    const path = (op as any).path;
+    if (path && Array.isArray(path)) {
+      return path.join(',');
+    }
+    return null;
+  };
+
+  // 合并 operations，set_viewport 和 set_node 类型合并 properties 和 newProperties
+  const mergeOperations = (
+    existingOps: PlaitOperation[],
+    newOps: PlaitOperation[]
+  ): PlaitOperation[] => {
+    // 处理 set_viewport 类型
+    const newSetViewportOps = newOps.filter((op) =>
+      PlaitOperation.isSetViewportOperation(op)
+    );
+
+    // 处理 set_node 类型，按 Path 分组
+    const newSetNodeOps = newOps.filter(isSetNodeOperation);
+    const newSetNodePaths = new Set(
+      newSetNodeOps.map(getOperationPath).filter(Boolean)
+    );
+
+    // 过滤掉需要合并的现有 operations
+    const filteredExisting = existingOps.filter((op) => {
+      // 过滤 set_viewport
+      if (PlaitOperation.isSetViewportOperation(op)) {
+        return false;
+      }
+      // 过滤与新的 set_node 相同 Path 的现有 set_node
+      if (isSetNodeOperation(op)) {
+        const path = getOperationPath(op);
+        if (path && newSetNodePaths.has(path)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // 合并 set_viewport
+    let mergedOps: PlaitOperation[] = [];
+    if (newSetViewportOps.length > 0) {
+      const existingSetViewportOps = existingOps.filter((op) =>
+        PlaitOperation.isSetViewportOperation(op)
+      );
+      const firstExistingSetViewport = existingSetViewportOps[0];
+      const lastNewSetViewport =
+        newSetViewportOps[newSetViewportOps.length - 1];
+
+      const mergedSetViewportOp = {
+        ...lastNewSetViewport,
+        properties: firstExistingSetViewport
+          ? (firstExistingSetViewport as any).properties
+          : (lastNewSetViewport as any).properties,
+        newProperties: (lastNewSetViewport as any).newProperties,
+      } as PlaitOperation;
+
+      mergedOps.push(mergedSetViewportOp);
+    }
+
+    // 合并 set_node（按 Path 分组处理）
+    const setNodeOpsByPath = new Map<string, PlaitOperation[]>();
+
+    // 收集所有相同 Path 的 set_node（包括现有的和新的）
+    [...existingOps, ...newOps].forEach((op) => {
+      if (isSetNodeOperation(op)) {
+        const path = getOperationPath(op);
+        if (path) {
+          if (!setNodeOpsByPath.has(path)) {
+            setNodeOpsByPath.set(path, []);
+          }
+          setNodeOpsByPath.get(path)!.push(op);
+        }
+      }
+    });
+
+    // 处理每个 Path 的 set_node 合并
+    setNodeOpsByPath.forEach((ops, path) => {
+      if (ops.length > 0) {
+        // 只处理那些在 newOps 中有对应 Path 的情况
+        if (newSetNodePaths.has(path)) {
+          const firstOp = ops[0];
+          const lastOp = ops[ops.length - 1];
+          const mergedSetNodeOp = {
+            ...lastOp,
+            // properties 取第一个的
+            properties: (firstOp as any).properties,
+            // newProperties 取最后一个的
+            newProperties: (lastOp as any).newProperties,
+          } as PlaitOperation;
+          mergedOps.push(mergedSetNodeOp);
+        }
+      }
+    });
+
+    // 过滤掉新的 operations 中的 set_viewport 和 set_node，然后添加合并后的
+    const filteredNewOps = newOps.filter((op) => {
+      if (PlaitOperation.isSetViewportOperation(op)) {
+        return false;
+      }
+      if (isSetNodeOperation(op)) {
+        return false;
+      }
+      return true;
+    });
+
+    return [...filteredExisting, ...mergedOps, ...filteredNewOps];
+  };
 
   const postSyncMessage = (message: DrawnixSyncMessage) => {
     console.log('postSyncMessage', message);
@@ -686,19 +961,28 @@ export const Drawnix: React.FC<DrawnixProps> = ({
             onChange={(data: BoardChangeData) => {
               onChange && onChange(data);
               if (iframeControlEnabled) {
+                // 过滤掉 set_selection 操作
+                const filteredOperations = data.operations.filter(
+                  (op) => !PlaitOperation.isSetSelectionOperation(op)
+                );
+
+                // 如果过滤后没有 operations，直接返回不发送
+                if (filteredOperations.length === 0) {
+                  return;
+                }
+
+                // 如果有 pending 数据，合并 operations（set_viewport 取最后值）
+                const pending = pendingDataRef.current;
+                const mergedOperations = pending
+                  ? mergeOperations(pending.operations, filteredOperations)
+                  : filteredOperations;
+
                 const currentData = {
                   children: data.children,
+                  operations: mergedOperations,
                   viewport: data.viewport,
+                  selection: data.selection,
                 };
-
-                // Check if data actually changed
-                const lastSent = lastSentDataRef.current;
-                const isChildrenEqual = lastSent && JSON.stringify(lastSent.children) === JSON.stringify(currentData.children);
-                const isViewportEqual = lastSent && JSON.stringify(lastSent.viewport) === JSON.stringify(currentData.viewport);
-
-                if (isChildrenEqual && isViewportEqual) {
-                  return; // No change, skip sending
-                }
 
                 // Store as pending data
                 pendingDataRef.current = currentData;
@@ -710,13 +994,13 @@ export const Drawnix: React.FC<DrawnixProps> = ({
 
                 // Set new timer to send data after delay
                 debounceTimerRef.current = setTimeout(() => {
-                  const pending = pendingDataRef.current;
-                  if (pending) {
+                  const pendingToSend = pendingDataRef.current;
+                  if (pendingToSend && pendingToSend.operations.length > 0) {
                     postSyncMessage({
                       type: DRAWNIX_CHANGE_MESSAGE_TYPE,
-                      payload: cloneSerializableData(pending),
+                      payload: cloneSerializableData(pendingToSend),
                     });
-                    lastSentDataRef.current = pending;
+                    lastSentDataRef.current = pendingToSend;
                     pendingDataRef.current = null;
                   }
                 }, DEBOUNCE_DELAY);
@@ -755,6 +1039,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                 <ClosePencilToolbar></ClosePencilToolbar>
                 <TTDDialog container={containerRef.current}></TTDDialog>
                 <CleanConfirm container={containerRef.current}></CleanConfirm>
+                <ViewportDebugPanel />
               </>
             )}
           </Wrapper>
