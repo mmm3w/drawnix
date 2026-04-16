@@ -99,6 +99,7 @@ export type DrawnixChangeMessage = {
     operations: PlaitOperation[];
     viewport: Viewport;
     selection: Selection | null;
+    senderContainerSize?: { width: number; height: number };
   };
   meta?: { senderId?: string };
 };
@@ -717,17 +718,43 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       }
       if (message.type === DRAWNIX_CHANGE_MESSAGE_TYPE) {
         const changeMessage = message as DrawnixChangeMessage;
-        const { operations } = changeMessage.payload;
+        const { operations, senderContainerSize } = changeMessage.payload;
         if (board && operations && operations.length > 0) {
-          const hasSetViewport = operations.some((op) =>
-            PlaitOperation.isSetViewportOperation(op)
+          let scale = 1;
+          if (senderContainerSize?.width) {
+            const selfRect = PlaitBoard.getBoardContainer(board).getBoundingClientRect();
+            scale = (selfRect.width || 1) / senderContainerSize.width;
+            if (!Number.isFinite(scale) || scale <= 0) {
+              scale = 1;
+            }
+          }
+          const hasSetViewport = operations.some((op: any) =>
+            op.type === 'set_viewport'
           );
           if (hasSetViewport) {
             clearViewportOrigination(board);
           }
-          operations.forEach((op) => {
-            remoteOperationsRef.current.add(op);
-            board.apply(op);
+          operations.forEach((op: any) => {
+            if (op.type === 'set_viewport' && scale !== 1) {
+              const scaledOp: any = { ...op };
+              if (op.properties && op.properties.zoom != null) {
+                scaledOp.properties = {
+                  ...op.properties,
+                  zoom: op.properties.zoom * scale,
+                };
+              }
+              if (op.newProperties && op.newProperties.zoom != null) {
+                scaledOp.newProperties = {
+                  ...op.newProperties,
+                  zoom: op.newProperties.zoom * scale,
+                };
+              }
+              remoteOperationsRef.current.add(scaledOp);
+              board.apply(scaledOp);
+            } else {
+              remoteOperationsRef.current.add(op);
+              board.apply(op);
+            }
           });
         }
         return;
@@ -863,6 +890,15 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                         return op;
                       }),
                     };
+                    // 附加发送端容器尺寸，供接收端做 viewport 比例换算
+                    const currentBoard = boardRef.current;
+                    if (currentBoard) {
+                      const rect = PlaitBoard.getBoardContainer(currentBoard).getBoundingClientRect();
+                      (sanitizedPayload as any).senderContainerSize = {
+                        width: rect.width || 1,
+                        height: rect.height || 1,
+                      };
+                    }
                     postSyncMessage({
                       type: DRAWNIX_CHANGE_MESSAGE_TYPE,
                       payload: cloneSerializableData(sanitizedPayload),
