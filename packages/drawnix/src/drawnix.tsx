@@ -851,9 +851,21 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                 debounceTimerRef.current = setTimeout(() => {
                   const pendingToSend = pendingDataRef.current;
                   if (pendingToSend && pendingToSend.operations.length > 0) {
+                    // 过滤 remove_node 中的 node 字段以减少数据包大小
+                    // 接收端 apply remove_node 时仅使用 path，不需要 node
+                    const sanitizedPayload = {
+                      ...pendingToSend,
+                      operations: pendingToSend.operations.map((op: any) => {
+                        if (op.type === 'remove_node') {
+                          const { node, ...rest } = op;
+                          return rest;
+                        }
+                        return op;
+                      }),
+                    };
                     postSyncMessage({
                       type: DRAWNIX_CHANGE_MESSAGE_TYPE,
-                      payload: cloneSerializableData(pendingToSend),
+                      payload: cloneSerializableData(sanitizedPayload),
                     });
                     lastSentDataRef.current = pendingToSend;
                     pendingDataRef.current = null;
