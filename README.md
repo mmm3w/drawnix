@@ -275,6 +275,28 @@ webViewRef.current?.postMessage(JSON.stringify({
 }
 ```
 
+### 载入全量数据
+
+当需要初始化或覆盖白板全部数据时，可发送 `drawnix:set-value` 消息：
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-value',
+    payload: {
+      children: [...],     // 可选，画板元素列表
+      viewport: { ... },   // 可选，视口数据
+      senderContainerSize: { width, height }, // 可选，发送端容器尺寸
+    },
+  },
+  '*'
+);
+```
+
+> 说明：
+> - `set-value` 会全量替换对应数据，建议在首次加载或需要重置场景下使用；日常增量同步请继续使用 `drawnix:change`。
+> - 携带 `senderContainerSize` 后，接收端会按比例换算 `viewport.zoom` 和 `origination`，保证不同分辨率下展示内容一致。
+
 ### 操作类型说明
 
 接收端白板会对收到的 `operations` 逐个调用 `board.apply(op)`。当前涉及的操作类型包括：

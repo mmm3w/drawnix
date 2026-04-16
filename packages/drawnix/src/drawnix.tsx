@@ -85,6 +85,7 @@ export const DRAWNIX_CLEAR_BOARD_MESSAGE_TYPE = 'drawnix:clear-board';
 export const DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPE =
   'drawnix:export-image-request';
 export const DRAWNIX_CHANGE_MESSAGE_TYPE = 'drawnix:change';
+export const DRAWNIX_SET_VALUE_MESSAGE_TYPE = 'drawnix:set-value';
 
 export type DrawnixLoadedMessage = {
   type: typeof DRAWNIX_LOADED_MESSAGE_TYPE;
@@ -104,7 +105,17 @@ export type DrawnixChangeMessage = {
   meta?: { senderId?: string };
 };
 
-export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage;
+export type DrawnixSetValueMessage = {
+  type: typeof DRAWNIX_SET_VALUE_MESSAGE_TYPE;
+  payload: {
+    children?: PlaitElement[];
+    viewport?: Viewport;
+    senderContainerSize?: { width: number; height: number };
+  };
+  meta?: { senderId?: string };
+};
+
+export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage | DrawnixSetValueMessage;
 
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
@@ -435,6 +446,14 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   const [board, setBoard] = useState<DrawnixBoard | null>(null);
   const boardRef = useRef<DrawnixBoard | null>(null);
 
+  // State for external data updates (e.g., full-value sync)
+  const [externalValue, setExternalValue] = useState<PlaitElement[] | undefined>(undefined);
+  const [externalViewport, setExternalViewport] = useState<Viewport | undefined>(undefined);
+
+  // Merge external data with props
+  const mergedValue = externalValue ?? value;
+  const mergedViewport = externalViewport ?? viewport;
+
   if (board) {
     board.appState = appState;
   }
@@ -617,6 +636,38 @@ export const Drawnix: React.FC<DrawnixProps> = ({
       return;
     }
     const allowedOrigins = iframeControl?.allowedOrigins ?? [];
+
+    const scaleViewport = (
+      vp: any,
+      senderContainerSize: { width: number; height: number } | undefined
+    ): any => {
+      if (!vp || vp.zoom == null || !senderContainerSize?.width) {
+        return vp;
+      }
+      const selfRect = PlaitBoard.getBoardContainer(board).getBoundingClientRect();
+      const scale = (selfRect.width || 1) / senderContainerSize.width;
+      if (!Number.isFinite(scale) || scale <= 0 || scale === 1) {
+        return vp;
+      }
+      const senderSize = senderContainerSize;
+      const selfSize = {
+        width: selfRect.width || 1,
+        height: selfRect.height || 1,
+      };
+      const zoom = vp.zoom;
+      const newZoom = zoom * scale;
+      const result = { ...vp, zoom: newZoom };
+      const orig = vp.origination;
+      if (orig && Array.isArray(orig) && orig.length >= 2) {
+        const centerX = orig[0] + senderSize.width / (2 * zoom);
+        const centerY = orig[1] + senderSize.height / (2 * zoom);
+        const newOrigX = centerX - selfSize.width / (2 * newZoom);
+        const newOrigY = centerY - selfSize.height / (2 * newZoom);
+        result.origination = [newOrigX, newOrigY];
+      }
+      return result;
+    };
+
     const onMessage = (event: MessageEvent<unknown>) => {
       if (!isAllowedOrigin(event.origin, allowedOrigins)) {
         return;
@@ -734,40 +785,14 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           if (hasSetViewport) {
             clearViewportOrigination(board);
           }
-          const senderSize = senderContainerSize;
-          const selfSize = senderSize
-            ? {
-                width: (PlaitBoard.getBoardContainer(board).getBoundingClientRect().width || 1),
-                height: (PlaitBoard.getBoardContainer(board).getBoundingClientRect().height || 1),
-              }
-            : null;
-
-          const scaleViewportPart = (vp: any): any => {
-            if (!vp || vp.zoom == null || !senderSize || !selfSize) {
-              return vp;
-            }
-            const zoom = vp.zoom;
-            const newZoom = zoom * scale;
-            const result = { ...vp, zoom: newZoom };
-            const orig = vp.origination;
-            if (orig && Array.isArray(orig) && orig.length >= 2) {
-              const centerX = orig[0] + senderSize.width / (2 * zoom);
-              const centerY = orig[1] + senderSize.height / (2 * zoom);
-              const newOrigX = centerX - selfSize.width / (2 * newZoom);
-              const newOrigY = centerY - selfSize.height / (2 * newZoom);
-              result.origination = [newOrigX, newOrigY];
-            }
-            return result;
-          };
-
           operations.forEach((op: any) => {
             if (op.type === 'set_viewport' && scale !== 1) {
               const scaledOp: any = { ...op };
               if (op.properties) {
-                scaledOp.properties = scaleViewportPart(op.properties);
+                scaledOp.properties = scaleViewport(op.properties, senderContainerSize);
               }
               if (op.newProperties) {
-                scaledOp.newProperties = scaleViewportPart(op.newProperties);
+                scaledOp.newProperties = scaleViewport(op.newProperties, senderContainerSize);
               }
               remoteOperationsRef.current.add(scaledOp);
               board.apply(scaledOp);
@@ -776,6 +801,18 @@ export const Drawnix: React.FC<DrawnixProps> = ({
               board.apply(op);
             }
           });
+        }
+        return;
+      }
+      if (message.type === DRAWNIX_SET_VALUE_MESSAGE_TYPE) {
+        const setValueMessage = message as DrawnixSetValueMessage;
+        const { children: newChildren, viewport: newViewport, senderContainerSize } = setValueMessage.payload;
+        if (newChildren !== undefined) {
+          setExternalValue(newChildren);
+        }
+        if (newViewport !== undefined && board) {
+          clearViewportOrigination(board);
+          setExternalViewport(scaleViewport(newViewport, senderContainerSize));
         }
         return;
       }
@@ -848,8 +885,8 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           ref={containerRef}
         >
           <Wrapper
-            value={value}
-            viewport={viewport}
+            value={mergedValue}
+            viewport={mergedViewport}
             theme={theme}
             options={options}
             plugins={plugins}

@@ -273,6 +273,28 @@ The receiver only actually needs `operations` and `senderContainerSize`, so you 
 }
 ```
 
+### Load Full Data
+
+When you need to initialize or overwrite the entire whiteboard, send a `drawnix:set-value` message:
+
+```ts
+iframe.contentWindow?.postMessage(
+  {
+    type: 'drawnix:set-value',
+    payload: {
+      children: [...],     // optional, board elements
+      viewport: { ... },   // optional, viewport data
+      senderContainerSize: { width, height }, // optional, sender container size
+    },
+  },
+  '*'
+);
+```
+
+> Notes:
+> - `set-value` fully replaces the corresponding data. It is recommended for initial loading or reset scenarios; use `drawnix:change` for daily incremental synchronization.
+> - When `senderContainerSize` is provided, the receiver will scale `viewport.zoom` and `origination` proportionally to ensure consistent display across different resolutions.
+
 ### Operation Types
 
 The receiver applies each operation via `board.apply(op)`. Supported operation types include:
