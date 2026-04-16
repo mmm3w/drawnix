@@ -1,6 +1,7 @@
 import { Board, BoardChangeData, Wrapper } from '@plait-board/react-board';
 import {
   BoardTransforms,
+  clearViewportOrigination,
   deleteFragment,
   getSelectedElements,
   PlaitBoard,
@@ -718,6 +719,12 @@ export const Drawnix: React.FC<DrawnixProps> = ({
         const changeMessage = message as DrawnixChangeMessage;
         const { operations } = changeMessage.payload;
         if (board && operations && operations.length > 0) {
+          const hasSetViewport = operations.some((op) =>
+            PlaitOperation.isSetViewportOperation(op)
+          );
+          if (hasSetViewport) {
+            clearViewportOrigination(board);
+          }
           operations.forEach((op) => {
             remoteOperationsRef.current.add(op);
             board.apply(op);
