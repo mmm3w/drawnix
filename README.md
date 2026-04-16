@@ -189,6 +189,102 @@ iframe.contentWindow?.postMessage(
 - `shape`（矩形）
 - `rectangle`
 
+## 数据同步（iframe / React Native WebView）
+
+开启 `iframeControl.enabled` 后，白板会在本地发生变更时通过 `postMessage` 自动发送 `drawnix:change` 事件，外部也可以将远程变更转发回白板实现多端同步。
+
+### 发送的消息
+
+```ts
+{
+  type: 'drawnix:change',
+  payload: {
+    children: PlaitElement[],   // 当前画板元素
+    operations: PlaitOperation[], // 变更操作列表（已过滤 set_selection）
+    viewport: Viewport,           // 当前视口
+    selection: Selection | null,  // 当前选区
+    senderContainerSize?: { width: number; height: number }, // 发送端容器尺寸
+  },
+  meta?: { senderId?: string }
+}
+```
+
+> 说明：
+> - `operations` 中 `remove_node` 已剔除 `node` 字段以减少体积。
+> - `set_selection` 操作已被过滤，不会同步。
+> - `senderContainerSize` 用于接收端按容器宽度比例换算 `zoom`，保证不同分辨率设备看到的内容范围一致，并自动将视口中心对齐。
+
+### iframe 接收与转发示例
+
+父页面监听并转发：
+
+```ts
+window.addEventListener('message', (event) => {
+  if (event.source === sourceFrame.contentWindow && event.data?.type === 'drawnix:change') {
+    // 转发给其它同步端
+    targetFrame.contentWindow?.postMessage(event.data, '*');
+  }
+});
+```
+
+### React Native WebView 接收与发送
+
+Drawnix 同时支持 `window.ReactNativeWebView.postMessage` 桥接。在 RN 侧：
+
+```tsx
+<WebView
+  ref={webViewRef}
+  source={{ uri: 'https://your-drawnix-app.com' }}
+  onMessage={(event) => {
+    const data = JSON.parse(event.nativeEvent.data);
+    if (data.type === 'drawnix:change') {
+      // 将数据同步到其它端
+    }
+  }}
+  injectedJavaScript={`
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (data?.type === 'drawnix:change') {
+        window.ReactNativeWebView.postMessage(JSON.stringify(data));
+      }
+    });
+  `}
+/>
+```
+
+RN 向白板发送远程变更：
+
+```ts
+webViewRef.current?.postMessage(JSON.stringify({
+  type: 'drawnix:change',
+  payload: remotePayload,
+}));
+```
+
+### 最小化转发
+
+接收端实际只依赖 `operations` 和 `senderContainerSize`，因此你可以只转发这两个字段以进一步减少通信体积：
+
+```ts
+{
+  type: 'drawnix:change',
+  payload: {
+    operations: remoteOperations,
+    senderContainerSize: { width, height },
+  }
+}
+```
+
+### 操作类型说明
+
+接收端白板会对收到的 `operations` 逐个调用 `board.apply(op)`。当前涉及的操作类型包括：
+
+- `insert_node` — 插入元素
+- `remove_node` — 删除元素（仅依赖 `path`）
+- `move_node` — 移动元素
+- `set_node` — 修改元素属性
+- `set_viewport` — 修改视口（接收端会按分辨率比例换算 `zoom` 和 `origination`）
+- `set_theme` — 修改主题
 
 ## 开发
 

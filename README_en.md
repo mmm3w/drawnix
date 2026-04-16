@@ -187,6 +187,102 @@ Supported `tool` values:
 - `shape` (rectangle)
 - `rectangle`
 
+## Data Synchronization (iframe / React Native WebView)
+
+When `iframeControl.enabled` is turned on, the whiteboard will automatically send a `drawnix:change` event via `postMessage` whenever local changes occur. External hosts can also forward remote changes back to the whiteboard to achieve multi-end synchronization.
+
+### Sent Message
+
+```ts
+{
+  type: 'drawnix:change',
+  payload: {
+    children: PlaitElement[],   // current board elements
+    operations: PlaitOperation[], // change operations (set_selection filtered out)
+    viewport: Viewport,           // current viewport
+    selection: Selection | null,  // current selection
+    senderContainerSize?: { width: number; height: number }, // sender container size
+  },
+  meta?: { senderId?: string }
+}
+```
+
+> Notes:
+> - `remove_node` operations have the `node` field stripped to reduce payload size.
+> - `set_selection` operations are filtered and not synchronized.
+> - `senderContainerSize` is used by the receiver to scale `zoom` proportionally based on container width, ensuring consistent content visibility across different resolutions, and automatically center-aligning the viewport.
+
+### iframe Receive & Forward Example
+
+Parent page listens and forwards:
+
+```ts
+window.addEventListener('message', (event) => {
+  if (event.source === sourceFrame.contentWindow && event.data?.type === 'drawnix:change') {
+    // forward to other synchronized ends
+    targetFrame.contentWindow?.postMessage(event.data, '*');
+  }
+});
+```
+
+### React Native WebView Receive & Send
+
+Drawnix also supports the `window.ReactNativeWebView.postMessage` bridge. On the RN side:
+
+```tsx
+<WebView
+  ref={webViewRef}
+  source={{ uri: 'https://your-drawnix-app.com' }}
+  onMessage={(event) => {
+    const data = JSON.parse(event.nativeEvent.data);
+    if (data.type === 'drawnix:change') {
+      // sync data to other ends
+    }
+  }}
+  injectedJavaScript={`
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (data?.type === 'drawnix:change') {
+        window.ReactNativeWebView.postMessage(JSON.stringify(data));
+      }
+    });
+  `}
+/>
+```
+
+Send remote changes from RN to the whiteboard:
+
+```ts
+webViewRef.current?.postMessage(JSON.stringify({
+  type: 'drawnix:change',
+  payload: remotePayload,
+}));
+```
+
+### Minimal Forwarding
+
+The receiver only actually needs `operations` and `senderContainerSize`, so you can forward just these two fields to further reduce payload size:
+
+```ts
+{
+  type: 'drawnix:change',
+  payload: {
+    operations: remoteOperations,
+    senderContainerSize: { width, height },
+  }
+}
+```
+
+### Operation Types
+
+The receiver applies each operation via `board.apply(op)`. Supported operation types include:
+
+- `insert_node` — insert element
+- `remove_node` — remove element (only depends on `path`)
+- `move_node` — move element
+- `set_node` — modify element properties
+- `set_viewport` — modify viewport (receiver scales `zoom` and `origination` proportionally)
+- `set_theme` — modify theme
 
 ## Development
 
