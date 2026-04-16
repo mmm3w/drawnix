@@ -51,153 +51,6 @@ import { I18nProvider } from './i18n';
 import { Tutorial } from './components/tutorial';
 import { LASER_POINTER_CLASS_NAME } from './utils/laser-pointer';
 
-// 调试组件：用于测试 DRAWNIX_UPDATE_DATA_MESSAGE_TYPE 事件的 viewport 参数
-const ViewportDebugPanel: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [offsetX, setOffsetX] = useState(0);
-  const [offsetY, setOffsetY] = useState(0);
-  const [zoom, setZoom] = useState(1);
-
-  const handleSendUpdateData = () => {
-    const message: DrawnixUpdateDataMessage = {
-      type: DRAWNIX_UPDATE_DATA_MESSAGE_TYPE,
-      payload: {
-        viewport: {
-          origination:[offsetX, offsetY],
-          zoom,
-        },
-      },
-    };
-    window.postMessage(message, window.location.origin);
-    console.log('[ViewportDebug] Sent DRAWNIX_UPDATE_DATA_MESSAGE_TYPE:', message);
-  };
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        top: '80px',
-        right: '10px',
-        zIndex: 9999,
-        backgroundColor: '#fff',
-        border: '1px solid #ccc',
-        borderRadius: '4px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-        padding: isOpen ? '12px' : '8px',
-        minWidth: isOpen ? '200px' : 'auto',
-      }}
-    >
-      {!isOpen ? (
-        <button
-          onClick={() => setIsOpen(true)}
-          style={{
-            background: '#1890ff',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            padding: '4px 12px',
-            cursor: 'pointer',
-            fontSize: '12px',
-          }}
-        >
-          调试 Viewport
-        </button>
-      ) : (
-        <div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '10px',
-            }}
-          >
-            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>Viewport 调试</span>
-            <button
-              onClick={() => setIsOpen(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '16px',
-                color: '#999',
-              }}
-            >
-              ×
-            </button>
-          </div>
-          <div style={{ marginBottom: '8px' }}>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>
-              offsetX:
-            </label>
-            <input
-              type="number"
-              value={offsetX}
-              onChange={(e) => setOffsetX(Number(e.target.value))}
-              style={{
-                width: '100%',
-                padding: '4px',
-                fontSize: '12px',
-                border: '1px solid #d9d9d9',
-                borderRadius: '2px',
-              }}
-            />
-          </div>
-          <div style={{ marginBottom: '8px' }}>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>
-              offsetY:
-            </label>
-            <input
-              type="number"
-              value={offsetY}
-              onChange={(e) => setOffsetY(Number(e.target.value))}
-              style={{
-                width: '100%',
-                padding: '4px',
-                fontSize: '12px',
-                border: '1px solid #d9d9d9',
-                borderRadius: '2px',
-              }}
-            />
-          </div>
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>
-              zoom:
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-              style={{
-                width: '100%',
-                padding: '4px',
-                fontSize: '12px',
-                border: '1px solid #d9d9d9',
-                borderRadius: '2px',
-              }}
-            />
-          </div>
-          <button
-            onClick={handleSendUpdateData}
-            style={{
-              width: '100%',
-              background: '#52c41a',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '4px',
-              padding: '6px',
-              cursor: 'pointer',
-              fontSize: '12px',
-            }}
-          >
-            发送 UpdateData
-          </button>
-        </div>
-      )}
-    </div>
-  );
-};
 import { Freehand, FreehandShape } from './plugins/freehand/type';
 import {
   ERASER_MEMORIZE_KEY,
@@ -231,7 +84,6 @@ export const DRAWNIX_CLEAR_BOARD_MESSAGE_TYPE = 'drawnix:clear-board';
 export const DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPE =
   'drawnix:export-image-request';
 export const DRAWNIX_CHANGE_MESSAGE_TYPE = 'drawnix:change';
-export const DRAWNIX_UPDATE_DATA_MESSAGE_TYPE = 'drawnix:update-data';
 
 export type DrawnixLoadedMessage = {
   type: typeof DRAWNIX_LOADED_MESSAGE_TYPE;
@@ -241,20 +93,16 @@ export type DrawnixLoadedMessage = {
 
 export type DrawnixChangeMessage = {
   type: typeof DRAWNIX_CHANGE_MESSAGE_TYPE;
-  payload: Pick<BoardChangeData, 'children' | 'viewport'>;
-  meta?: { senderId?: string };
-};
-
-export type DrawnixUpdateDataMessage = {
-  type: typeof DRAWNIX_UPDATE_DATA_MESSAGE_TYPE;
   payload: {
-    children?: PlaitElement[];
-    viewport?: Viewport;
+    children: PlaitElement[];
+    operations: PlaitOperation[];
+    viewport: Viewport;
+    selection: Selection | null;
   };
   meta?: { senderId?: string };
 };
 
-export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage | DrawnixUpdateDataMessage;
+export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage;
 
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
@@ -585,14 +433,6 @@ export const Drawnix: React.FC<DrawnixProps> = ({
   const [board, setBoard] = useState<DrawnixBoard | null>(null);
   const boardRef = useRef<DrawnixBoard | null>(null);
 
-  // State for external data updates
-  const [externalValue, setExternalValue] = useState<PlaitElement[] | undefined>(undefined);
-  const [externalViewport, setExternalViewport] = useState<Viewport | undefined>(undefined);
-
-  // Merge external data with props
-  const mergedValue = externalValue ?? value;
-  const mergedViewport = externalViewport ?? viewport;
-
   if (board) {
     board.appState = appState;
   }
@@ -622,6 +462,7 @@ export const Drawnix: React.FC<DrawnixProps> = ({
     viewport: Viewport;
     selection: Selection | null;
   } | null>(null);
+  const remoteOperationsRef = useRef<WeakSet<PlaitOperation>>(new WeakSet());
   const DEBOUNCE_DELAY = 200; // ms
 
   // 判断是否为 set_node 操作
@@ -873,14 +714,14 @@ export const Drawnix: React.FC<DrawnixProps> = ({
         saveAsImage(board, isTransparent);
         return;
       }
-      if (message.type === DRAWNIX_UPDATE_DATA_MESSAGE_TYPE) {
-        const updateMessage = message as DrawnixUpdateDataMessage;
-        const { children: newChildren, viewport: newViewport } = updateMessage.payload;
-        if (newChildren !== undefined) {
-          setExternalValue(newChildren);
-        }
-        if (newViewport !== undefined) {
-          setExternalViewport(newViewport);
+      if (message.type === DRAWNIX_CHANGE_MESSAGE_TYPE) {
+        const changeMessage = message as DrawnixChangeMessage;
+        const { operations } = changeMessage.payload;
+        if (board && operations && operations.length > 0) {
+          operations.forEach((op) => {
+            remoteOperationsRef.current.add(op);
+            board.apply(op);
+          });
         }
         return;
       }
@@ -953,18 +794,25 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           ref={containerRef}
         >
           <Wrapper
-            value={mergedValue}
-            viewport={mergedViewport}
+            value={value}
+            viewport={viewport}
             theme={theme}
             options={options}
             plugins={plugins}
             onChange={(data: BoardChangeData) => {
               onChange && onChange(data);
               if (iframeControlEnabled) {
-                // 过滤掉 set_selection 操作
+                // 过滤掉 set_selection 操作和远程 operations
                 const filteredOperations = data.operations.filter(
-                  (op) => !PlaitOperation.isSetSelectionOperation(op)
+                  (op) =>
+                    !PlaitOperation.isSetSelectionOperation(op) &&
+                    !remoteOperationsRef.current.has(op)
                 );
+
+                // 应用完成后清理已处理的远程 operations
+                data.operations.forEach((op) => {
+                  remoteOperationsRef.current.delete(op);
+                });
 
                 // 如果过滤后没有 operations，直接返回不发送
                 if (filteredOperations.length === 0) {
@@ -1039,7 +887,6 @@ export const Drawnix: React.FC<DrawnixProps> = ({
                 <ClosePencilToolbar></ClosePencilToolbar>
                 <TTDDialog container={containerRef.current}></TTDDialog>
                 <CleanConfirm container={containerRef.current}></CleanConfirm>
-                <ViewportDebugPanel />
               </>
             )}
           </Wrapper>
