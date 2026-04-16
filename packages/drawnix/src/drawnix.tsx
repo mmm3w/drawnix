@@ -734,20 +734,40 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           if (hasSetViewport) {
             clearViewportOrigination(board);
           }
+          const senderSize = senderContainerSize;
+          const selfSize = senderSize
+            ? {
+                width: (PlaitBoard.getBoardContainer(board).getBoundingClientRect().width || 1),
+                height: (PlaitBoard.getBoardContainer(board).getBoundingClientRect().height || 1),
+              }
+            : null;
+
+          const scaleViewportPart = (vp: any): any => {
+            if (!vp || vp.zoom == null || !senderSize || !selfSize) {
+              return vp;
+            }
+            const zoom = vp.zoom;
+            const newZoom = zoom * scale;
+            const result = { ...vp, zoom: newZoom };
+            const orig = vp.origination;
+            if (orig && Array.isArray(orig) && orig.length >= 2) {
+              const centerX = orig[0] + senderSize.width / (2 * zoom);
+              const centerY = orig[1] + senderSize.height / (2 * zoom);
+              const newOrigX = centerX - selfSize.width / (2 * newZoom);
+              const newOrigY = centerY - selfSize.height / (2 * newZoom);
+              result.origination = [newOrigX, newOrigY];
+            }
+            return result;
+          };
+
           operations.forEach((op: any) => {
             if (op.type === 'set_viewport' && scale !== 1) {
               const scaledOp: any = { ...op };
-              if (op.properties && op.properties.zoom != null) {
-                scaledOp.properties = {
-                  ...op.properties,
-                  zoom: op.properties.zoom * scale,
-                };
+              if (op.properties) {
+                scaledOp.properties = scaleViewportPart(op.properties);
               }
-              if (op.newProperties && op.newProperties.zoom != null) {
-                scaledOp.newProperties = {
-                  ...op.newProperties,
-                  zoom: op.newProperties.zoom * scale,
-                };
+              if (op.newProperties) {
+                scaledOp.newProperties = scaleViewportPart(op.newProperties);
               }
               remoteOperationsRef.current.add(scaledOp);
               board.apply(scaledOp);
