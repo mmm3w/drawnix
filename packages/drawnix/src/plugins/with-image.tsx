@@ -38,8 +38,8 @@ export const withImagePlugin = (board: PlaitBoard) => {
       clipboardData?.files?.length &&
       isSupportedImageFileType(clipboardData.files[0].type)
     ) {
-      const imageFile = clipboardData.files[0];
-      insertImage(board, imageFile, targetPoint, false);
+      // const imageFile = clipboardData.files[0];
+      // insertImage(board, imageFile, targetPoint, false);
       return;
     }
     insertFragment(clipboardData, targetPoint, operationType);
