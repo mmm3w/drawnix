@@ -46,17 +46,6 @@ export const withImagePlugin = (board: PlaitBoard) => {
   };
 
   newBoard.drop = (event: DragEvent) => {
-    if (event.dataTransfer?.files?.length) {
-      const imageFile = event.dataTransfer.files[0];
-      if (isSupportedImageFileType(imageFile.type)) {
-        const point = toViewBoxPoint(
-          board,
-          toHostPoint(board, event.x, event.y)
-        );
-        insertImage(board, imageFile, point, true);
-        return true;
-      }
-    }
     return drop(event);
   };
 
