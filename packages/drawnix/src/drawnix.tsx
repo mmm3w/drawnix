@@ -22,7 +22,7 @@ import {
   setCreationMode,
   withGroup,
 } from '@plait/common';
-import { ArrowLineShape, BasicShapes, withDraw } from '@plait/draw';
+import { ArrowLineShape, BasicShapes, DrawTransforms, withDraw } from '@plait/draw';
 import { MindPointerType, MindThemeColors, withMind } from '@plait/mind';
 import MobileDetect from 'mobile-detect';
 import { withMindExtend } from './plugins/with-mind-extend';
@@ -86,6 +86,7 @@ export const DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPE =
   'drawnix:export-image-request';
 export const DRAWNIX_CHANGE_MESSAGE_TYPE = 'drawnix:change';
 export const DRAWNIX_SET_VALUE_MESSAGE_TYPE = 'drawnix:set-value';
+export const DRAWNIX_ADD_IMAGE_MESSAGE_TYPE = 'drawnix:add-image';
 
 export type DrawnixLoadedMessage = {
   type: typeof DRAWNIX_LOADED_MESSAGE_TYPE;
@@ -115,7 +116,19 @@ export type DrawnixSetValueMessage = {
   meta?: { senderId?: string };
 };
 
-export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage | DrawnixSetValueMessage;
+export type DrawnixAddImageMessage = {
+  type: typeof DRAWNIX_ADD_IMAGE_MESSAGE_TYPE;
+  payload: {
+    imageUrl: string;
+    width?: number;
+    height?: number;
+    x?: number;
+    y?: number;
+  };
+  meta?: { senderId?: string };
+};
+
+export type DrawnixSyncMessage = DrawnixLoadedMessage | DrawnixChangeMessage | DrawnixSetValueMessage | DrawnixAddImageMessage;
 
 const DRAWNIX_SET_TOOL_MESSAGE_TYPES = new Set([
   'drawnix:set-tool',
@@ -158,6 +171,13 @@ const DRAWNIX_EXPORT_IMAGE_REQUEST_MESSAGE_TYPES = new Set([
   'drawnix:exportImage',
   'export-image',
   'exportImage',
+]);
+
+const DRAWNIX_ADD_IMAGE_MESSAGE_TYPES = new Set([
+  DRAWNIX_ADD_IMAGE_MESSAGE_TYPE,
+  'drawnix:addImage',
+  'add-image',
+  'addImage',
 ]);
 
 const DRAWNIX_TOOL_POINTER_MAP: Record<string, DrawnixPointerType> = {
@@ -285,6 +305,67 @@ const getExportImageTransparentFromMessage = (
   }
   // Default to png/transparent to match existing toolbar behavior.
   return true;
+};
+
+const getImageFromMessage = (message: Record<string, unknown>) => {
+  const result: {
+    imageUrl?: string;
+    width?: number;
+    height?: number;
+    x?: number;
+    y?: number;
+  } = {};
+
+  // Check top-level properties
+  if (typeof message.imageUrl === 'string') {
+    result.imageUrl = message.imageUrl;
+  }
+  if (typeof message.url === 'string') {
+    result.imageUrl = message.url;
+  }
+  if (typeof message.src === 'string') {
+    result.imageUrl = message.src;
+  }
+  if (typeof message.width === 'number') {
+    result.width = message.width;
+  }
+  if (typeof message.height === 'number') {
+    result.height = message.height;
+  }
+  if (typeof message.x === 'number') {
+    result.x = message.x;
+  }
+  if (typeof message.y === 'number') {
+    result.y = message.y;
+  }
+
+  // Check payload properties
+  if (message.payload && typeof message.payload === 'object') {
+    const payload = message.payload as Record<string, unknown>;
+    if (typeof payload.imageUrl === 'string') {
+      result.imageUrl = payload.imageUrl;
+    }
+    if (typeof payload.url === 'string') {
+      result.imageUrl = payload.url;
+    }
+    if (typeof payload.src === 'string') {
+      result.imageUrl = payload.src;
+    }
+    if (typeof payload.width === 'number') {
+      result.width = payload.width;
+    }
+    if (typeof payload.height === 'number') {
+      result.height = payload.height;
+    }
+    if (typeof payload.x === 'number') {
+      result.x = payload.x;
+    }
+    if (typeof payload.y === 'number') {
+      result.y = payload.y;
+    }
+  }
+
+  return result;
 };
 
 const parseIncomingMessage = (rawData: unknown): Record<string, unknown> | null => {
@@ -814,6 +895,22 @@ export const Drawnix: React.FC<DrawnixProps> = ({
           clearViewportOrigination(board);
           setExternalViewport(scaleViewport(newViewport, senderContainerSize));
         }
+        return;
+      }
+      if (DRAWNIX_ADD_IMAGE_MESSAGE_TYPES.has(message.type)) {
+        const imageData = getImageFromMessage(message);
+        if (!imageData.imageUrl || !board) {
+          return;
+        }
+        const imageItem = {
+          url: imageData.imageUrl,
+          width: imageData.width || 400,
+          height: imageData.height || 300,
+        };
+        const point = imageData.x !== undefined && imageData.y !== undefined
+          ? [imageData.x, imageData.y] as [number, number]
+          : undefined;
+        DrawTransforms.insertImage(board, imageItem, point);
         return;
       }
     };
