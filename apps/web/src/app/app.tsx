@@ -40,7 +40,7 @@ export function App() {
       // }}
       hidePopupToolbar
       // disabled
-      // embedded={true}
+      embedded={true}
       iframeControl={{ enabled: true }}
     ></Drawnix>
   );
